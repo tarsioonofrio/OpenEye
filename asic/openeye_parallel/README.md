@@ -58,18 +58,9 @@ must update both configurations. An OpenEye full-core result also does not
 match FastConv's convolution compute block until the measured block boundaries
 are aligned.
 
-## First Paxos pilot
+## Power status
 
-The first successful run used Genus 23.14, TT 0.90 V / 25 C, a 2 ns clock,
-and `ASIC_PARAMETERS="CLUSTER_ROWS=1 CLUSTER_COLUMNS=1 SERIAL=1 PARALLEL_MACS=1 TRANS_BITWIDTH_PSUM=20"`.
-It completed synthesis with 20,134 mapped standard cells and 24,776.010 um²
-cell area (33,760.555 um² including reported net area). The reported worst
-setup path had 338 ps slack in the global interconnect estimate. These are
-pilot values for the reduced one-cluster/12-PE core with SRAM storage abstracted;
-they are not placed or routed results.
-
-The run also emitted 7.13671 mW in `power_vectorless.rpt`, with 0 mW assigned
-to the abstract memories. This uses vectorless default activity, so it is not a
-workload power result and must not be compared to FastConv. No validated
-OpenEye Xcelium SHM was available in this run, so activity-based `run_power.sh`
-has not yet produced a result.
+No validated OpenEye Xcelium SHM is available yet, so activity-based
+`run_power.sh` has not produced a workload power result. The synthesis script
+does emit `power_vectorless.rpt`; its default activity is only a diagnostic and
+must not be compared to FastConv.
