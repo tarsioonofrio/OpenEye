@@ -5,6 +5,7 @@ set HDL_DIR [file join $REPO_ROOT hdl]
 set OUT_DIR [file join $FLOW_DIR results]
 file mkdir [file join $OUT_DIR reports]
 file mkdir [file join $OUT_DIR netlist]
+set_db init_hdl_search_path [list $FLOW_DIR]
 
 set LIB_PATH /pdk/tsmc/PDK28/PDK_TSMC28_bv/tcbn28hpcplusbwp30p140_190a/TSMCHOME/digital/Front_End
 set TECH_PATH /pdk/tsmc/PDK28/PDK_TSMC28_bv/tcbn28hpcplusbwp30p140_190a/TSMCHOME/digital/Back_End
@@ -37,7 +38,6 @@ set source_files [list \
     [file join $HDL_DIR OpenEye_Cluster.v] \
     [file join $HDL_DIR GLB_cluster.v] \
     [file join $HDL_DIR af_cluster.v] \
-    [file join $HDL_DIR bano_cluster.v] \
     [file join $HDL_DIR delay_cluster.v] \
     [file join $HDL_DIR router_iact.v] \
     [file join $HDL_DIR router_wght.v] \
@@ -60,8 +60,8 @@ set source_files [list \
     [file join $HDL_DIR RAM_SP.v] \
     [file join $FLOW_DIR memory_abstract.v]]
 
-read_hdl -sv -define {USE_INTERNAL_PARAMS_PE USE_INTERNAL_PARAMS_PE_cluster} \
-    -incdir $FLOW_DIR $source_files
+read_hdl -define {USE_INTERNAL_PARAMS_PE USE_INTERNAL_PARAMS_PE_cluster NO_TRACE} \
+    -sv {*}$source_files
 elaborate OpenEye_Parallel -parameters $parameters
 init_design
 syn_generic

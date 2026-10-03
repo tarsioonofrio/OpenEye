@@ -7,4 +7,7 @@ if ! command -v genus >/dev/null 2>&1; then
     module use /soft64/modulefiles
     module load cadence/ddi/231
 fi
-exec genus -batch -files "$flow_dir/run_synthesis.tcl" "$@"
+genus -batch -files "$flow_dir/run_synthesis.tcl" "$@"
+test -s "$flow_dir/results/netlist/OpenEye_Parallel_mapped.db"
+test -s "$flow_dir/results/netlist/OpenEye_Parallel_mapped.v"
+test -s "$flow_dir/results/reports/area.rpt"
