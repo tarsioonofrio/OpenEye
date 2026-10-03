@@ -60,8 +60,11 @@ set source_files [list \
     [file join $HDL_DIR RAM_SP.v] \
     [file join $FLOW_DIR memory_abstract.v]]
 
-read_hdl -define {USE_INTERNAL_PARAMS_PE USE_INTERNAL_PARAMS_PE_cluster NO_TRACE} \
-    -sv {*}$source_files
+read_hdl -language SystemVerilog \
+    -define USE_INTERNAL_PARAMS_PE \
+    -define USE_INTERNAL_PARAMS_PE_cluster \
+    -define NO_TRACE \
+    {*}$source_files
 elaborate OpenEye_Parallel -parameters $parameters
 init_design
 syn_generic
