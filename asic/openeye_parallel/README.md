@@ -19,7 +19,7 @@ leakage, dynamic power, and access energy must be accounted for separately.
 
 ## Synthesis
 
-On Paxos, from any directory:
+On Paxos, from the repository root (or invoke the script by absolute path):
 
 ```bash
 asic/openeye_parallel/run_synthesis.sh
@@ -63,4 +63,25 @@ are aligned.
 No validated OpenEye Xcelium SHM is available yet, so activity-based
 `run_power.sh` has not produced a workload power result. The synthesis script
 does emit `power_vectorless.rpt`; its default activity is only a diagnostic and
-must not be compared to FastConv.
+must not be compared to FastConv. The Paxos Python environment also lacks
+`cocotb` and `cocotb_test`, which the supplied layer-level simulation imports.
+
+The latest successful pilot run used Genus 23.14, TT 0.90 V / 25 C, a 2 ns
+clock, and `ASIC_PARAMETERS="CLUSTER_ROWS=1 CLUSTER_COLUMNS=1 SERIAL=1 PARALLEL_MACS=1 TRANS_BITWIDTH_PSUM=20"`.
+It mapped 20,123 standard cells with 24,778.404 um² cell area (33,759.210 um²
+including reported net area). The worst setup path had 338 ps slack in Genus's
+global interconnect estimate. This describes the reduced one-cluster/12-PE
+core with SRAM storage abstracted; it is not placed or routed.
+
+The same synthesis emitted 7.14441 mW vectorless power and assigned 0 mW to
+the abstract memories. This is not workload power.
+
+## FastConv comparison checkpoint
+
+The supplied FastConv example report is for `Conv`, TT 0.90 V / 25 C, 2 ns,
+and reports 0.650788 mW from one SHM frame. Its Genus log also warns that
+`RTLStim2Gate` was off for RTL stimulus, which can cause incorrect annotation,
+and reports undriven hierarchical pins. Treat that number as an existing report,
+not a validated comparison baseline. Re-run activity translation and power in
+both projects on the same validated convolution workload and operation count,
+with the same memory boundary, before drawing a power conclusion.
