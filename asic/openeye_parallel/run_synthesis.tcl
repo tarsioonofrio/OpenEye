@@ -60,7 +60,7 @@ set source_files [list \
     [file join $HDL_DIR RAM_SP.v] \
     [file join $FLOW_DIR memory_abstract.v]]
 
-read_hdl -language SystemVerilog \
+read_hdl -language sv \
     -define USE_INTERNAL_PARAMS_PE \
     -define USE_INTERNAL_PARAMS_PE_cluster \
     -define NO_TRACE \
