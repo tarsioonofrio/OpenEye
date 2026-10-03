@@ -27,10 +27,18 @@ set_db hdl_error_on_latch true
 set_db hdl_parameter_naming_style ""
 
 # This small, explicitly parameterized array is an elaboration/synthesis pilot.
-# Override via ASIC_PARAMETERS, e.g. "CLUSTER_ROWS=2 CLUSTER_COLUMNS=2".
-set parameters {CLUSTER_ROWS=1 CLUSTER_COLUMNS=1 SERIAL=1 PARALLEL_MACS=1 TRANS_BITWIDTH_PSUM=20}
+# Genus expects parameter/value pairs. Override via ASIC_PARAMETERS as
+# whitespace-separated NAME=VALUE entries.
+set parameters {{CLUSTER_ROWS 1} {CLUSTER_COLUMNS 1} {SERIAL 1} {PARALLEL_MACS 1} {TRANS_BITWIDTH_PSUM 20}}
 if {[info exists ::env(ASIC_PARAMETERS)] && $::env(ASIC_PARAMETERS) ne ""} {
-    set parameters [split $::env(ASIC_PARAMETERS)]
+    set parameters [list]
+    foreach parameter [split $::env(ASIC_PARAMETERS)] {
+        set pair [split $parameter =]
+        if {[llength $pair] != 2 || [lindex $pair 0] eq "" || [lindex $pair 1] eq ""} {
+            error "Invalid ASIC_PARAMETERS item '$parameter'; expected NAME=VALUE"
+        }
+        lappend parameters [list [lindex $pair 0] [lindex $pair 1]]
+    }
 }
 
 set source_files [list \
