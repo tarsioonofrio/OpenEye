@@ -234,6 +234,14 @@ async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, la
     if(stream[layer_repetition][strdic.stream_parallel_dict["status"]][strdic.status_dict["skipPsum"]] != 1):
         await psum_thread
     logger.info("Stream is sent.")
+    # OpenEye_Parallel waits for the external PSUM controller to announce that
+    # the bias/partial-sum transfer is complete before advancing a compute
+    # cycle. The FPGA wrapper normally drives this from psum_pipeline; this
+    # direct-core testbench must provide the same handshake itself.
+    if hasattr(dut, "psum_transmitted_i"):
+        cocotb.start_soon(rtl_test_utils.set_input(
+            ptp, dut.psum_transmitted_i, 1
+        ))
     cocotb.start_soon(rtl_test_utils.set_input(ptp, dut.compute_i, 1))
     await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
     cocotb.start_soon(rtl_test_utils.set_input(ptp, dut.compute_i, 0))
@@ -263,4 +271,8 @@ async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, la
             oep, layer_es, dram, log_level
         )
     cocotb.start_soon(rtl_test_utils.set_input(ptp, dut.psum_ready_i, 0))
+    if hasattr(dut, "psum_transmitted_i"):
+        cocotb.start_soon(rtl_test_utils.set_input(
+            ptp, dut.psum_transmitted_i, 0
+        ))
     await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
