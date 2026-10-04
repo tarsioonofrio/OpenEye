@@ -13,9 +13,15 @@ def simulator_options(sim_build, hdl_dir, default):
     if simulator not in {"icarus", "verilator", "xcelium"}:
         raise ValueError(f"Unsupported OPENEYE_SIMULATOR={simulator!r}")
 
+    dump_waves = os.environ.get("OPENEYE_DUMP_WAVES", "0").lower() in {
+        "1", "true", "yes", "on"
+    }
     options = {
         "simulator": simulator,
         "includes": [os.path.join(os.fspath(hdl_dir), "include")],
+        # OpenEye_Parallel has a COCOTB_SIM dump hook. Keep large workload
+        # traces opt-in; they can grow to gigabytes on full feature maps.
+        "defines": [] if dump_waves else ["NO_TRACE"],
     }
     if simulator == "xcelium":
         xcelium_tmp = os.path.join(os.fspath(sim_build), "xcelium_tmp")

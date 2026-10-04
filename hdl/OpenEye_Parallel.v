@@ -230,11 +230,13 @@ module OpenEye_Parallel #(
   );
 
 `ifdef COCOTB_SIM
+  `ifndef NO_TRACE
   initial begin
     if (IS_TOPLEVEL) begin
       $dumpvars(0, OpenEye_Parallel);
     end
   end
+  `endif
 `endif
 
   ///#######################
