@@ -15,10 +15,11 @@ module OpenEye_FPGA_gemm_workload_tb;
   wire enable_dma_o;
   wire last_data_o;
 
-  logic [63:0] dma_input_mem [0:`GEMM_DMA_WORD_COUNT-1];
-  logic [31:0] expected_mem [0:`GEMM_OUTPUT_COUNT-1];
+  logic [63:0] dma_input_mem [0:`GEMM_TOTAL_DMA_WORD_COUNT-1];
+  logic [31:0] expected_mem [0:`GEMM_TOTAL_OUTPUT_COUNT-1];
 
   integer cycle_index;
+  integer row_index;
   integer output_index;
   integer output_filter;
   integer signed actual_value;
@@ -54,49 +55,60 @@ module OpenEye_FPGA_gemm_workload_tb;
     if (!ready_dma_o)
       $fatal(1, "OpenEye_FPGA never became ready for the GEMM DMA workload");
 
-    // Replay the same ordered DMA sections produced by GemmMapper:
-    // configuration/router words, activations, weights, bias, quantization.
-    for (cycle_index = 0; cycle_index < `GEMM_DMA_WORD_COUNT; cycle_index = cycle_index + 1) begin
-      @(negedge clk_i);
-      data_dma_i = dma_input_mem[cycle_index];
-      enable_dma_i = 1'b1;
-    end
-    @(negedge clk_i);
-    data_dma_i = '0;
-    enable_dma_i = 1'b0;
-
     // The FPGA wrapper waits for host readiness before it drains the result
     // SPad, so keep the output side ready while monitoring each valid beat.
     ready_dma_i = 1'b1;
-    output_index = 0;
-    cycle_index = 0;
-    // Sample after the DUT's rising-edge nonblocking assignments have settled.
-    // ready_dma_i stays high, so each valid cycle is accepted at the next edge.
-    while (output_index < `GEMM_OUTPUT_COUNT && cycle_index < 400000) begin
+    for (row_index = 0; row_index < `GEMM_MATRIX_ROWS; row_index = row_index + 1) begin
+      // Each matrix row is one mapper transmission through the same FPGA top.
+      for (cycle_index = 0; cycle_index < `GEMM_DMA_WORD_COUNT; cycle_index = cycle_index + 1) begin
+        @(negedge clk_i);
+        data_dma_i = dma_input_mem[row_index * `GEMM_DMA_WORD_COUNT + cycle_index];
+        enable_dma_i = 1'b1;
+      end
       @(negedge clk_i);
-      cycle_index = cycle_index + 1;
-      if (enable_dma_o) begin
-        // Match rtl_test_utils.compare_stream_Dense: cluster columns are
-        // interleaved for each psum address in the DMA output stream.
-        output_filter = (output_index % `GEMM_CLUSTER_COLUMNS)
-                        * `GEMM_OUTPUTS_PER_CLUSTER_COLUMN
-                        + output_index / `GEMM_CLUSTER_COLUMNS;
-        actual_value = $signed(data_dma_o[19:0]);
-        expected_value = $signed(expected_mem[output_filter]);
-        if (actual_value !== expected_value)
-          $fatal(1, "GEMM output beat %0d maps to C[%0d]: got %0d expected %0d",
-                 output_index, output_filter, actual_value, expected_value);
-        output_index = output_index + 1;
+      data_dma_i = '0;
+      enable_dma_i = 1'b0;
+
+      output_index = 0;
+      cycle_index = 0;
+      // Sample after rising-edge nonblocking assignments have settled.
+      while (output_index < `GEMM_OUTPUT_COUNT && cycle_index < 400000) begin
+        @(negedge clk_i);
+        cycle_index = cycle_index + 1;
+        if (enable_dma_o) begin
+          // Match rtl_test_utils.compare_stream_Dense: cluster columns are
+          // interleaved for each psum address in the DMA output stream.
+          output_filter = (output_index % `GEMM_CLUSTER_COLUMNS)
+                          * `GEMM_OUTPUTS_PER_CLUSTER_COLUMN
+                          + output_index / `GEMM_CLUSTER_COLUMNS;
+          actual_value = $signed(data_dma_o[19:0]);
+          expected_value = $signed(expected_mem[row_index * `GEMM_OUTPUT_COUNT + output_index]);
+          if (actual_value !== expected_value)
+            $fatal(1, "GEMM row %0d output beat %0d maps to C[%0d]: got %0d expected %0d",
+                   row_index, output_index, output_filter, actual_value, expected_value);
+          output_index = output_index + 1;
+        end
+      end
+      if (output_index != `GEMM_OUTPUT_COUNT)
+        $fatal(1, "GEMM row %0d output count %0d, expected %0d (FSM=%0d)",
+               row_index, output_index, `GEMM_OUTPUT_COUNT, dut.fsm_current_state);
+      if (dut.OpenEye_Parallel.gemm_mode_reg !== 1'b1)
+        $fatal(1, "DMA workload did not configure output-stationary GEMM mode");
+
+      if (row_index + 1 < `GEMM_MATRIX_ROWS) begin
+        cycle_index = 0;
+        while (!(ready_dma_o && !enable_dma_o && dut.fsm_current_state == 1)
+               && cycle_index < 1000) begin
+          @(negedge clk_i);
+          cycle_index = cycle_index + 1;
+        end
+        if (!(ready_dma_o && !enable_dma_o && dut.fsm_current_state == 1))
+          $fatal(1, "OpenEye_FPGA not ready for GEMM row %0d", row_index + 1);
       end
     end
-    if (output_index != `GEMM_OUTPUT_COUNT)
-      $fatal(1, "GEMM output count %0d, expected %0d (FSM=%0d)",
-             output_index, `GEMM_OUTPUT_COUNT, dut.fsm_current_state);
-    if (dut.OpenEye_Parallel.gemm_mode_reg !== 1'b1)
-      $fatal(1, "DMA workload did not configure output-stationary GEMM mode");
 
-    $display("PASS: full-system GEMM K=%0d N=%0d seed=20261003 outputs=%0d mode=output-stationary",
-             32, 32, output_index);
+    $display("PASS: full-system GEMM M=%0d K=%0d N=%0d seed=20261003 output_beats=%0d mode=output-stationary",
+             `GEMM_MATRIX_ROWS, `GEMM_K, `GEMM_N, `GEMM_TOTAL_OUTPUT_COUNT);
     $finish;
   end
 endmodule

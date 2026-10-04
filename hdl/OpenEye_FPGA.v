@@ -2007,7 +2007,10 @@ end
           overhang_counter   <= overhang_discrepancy;
           ready_dma_o        <= 1;
           wght_buffer_en_w   <= 0;
-          pooling_buffer_enable <= 1;
+          // The running-max ring buffer is only consumed by pooling. Pushing
+          // reset values during GEMM/Dense quantization needlessly advances
+          // its pointers and can collide when psum_size_x == 1 (limit_i == 0).
+          pooling_buffer_enable <= pooling;
           if (pooling_mode == 0) begin
             for (a = 0; a < CHANNELS_PER_WORD; a = a + 1) begin
               pooling_buffer_new[a] <= -128;
@@ -2044,13 +2047,8 @@ end
               select_ram_counter2 <= 0;
               buffer_addr_temp_reg <= -1;
               iact_buffer_data_w   <= 0;
-              // pooling_buffer_enable above pulses every layer's GET_QUANTIZE
-              // (not just pooling ones), which drives the running-max ring
-              // buffer's ready_i and drifts its read/write pointers before
-              // this layer's own pooling pass ever starts. The single
-              // set_pointer_start reset in MAXPOOLING_SEND only fires when
-              // leaving a pooling layer, so it does not protect against that
-              // drift. Reset again right here, before the first real push.
+              // Reset the running-max ring after this pooling layer's initial
+              // sentinel pushes and before the first MAXPOOLING_READ window.
               set_pointer_start    <= 1;
             end
           end

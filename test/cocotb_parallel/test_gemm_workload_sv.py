@@ -58,7 +58,12 @@ def test_full_system_gemm_workload_sv(tmp_path):
     )
     tmp_path.mkdir(parents=True, exist_ok=True)
     _run(
-        [sys.executable, str(TEST_DIR / "generate_gemm_workload.py"), str(tmp_path)],
+        [
+            sys.executable, str(TEST_DIR / "generate_gemm_workload.py"), str(tmp_path),
+            "--m", os.environ.get("OPENEYE_GEMM_M", "1"),
+            "--k", os.environ.get("OPENEYE_GEMM_K", "32"),
+            "--n", os.environ.get("OPENEYE_GEMM_N", "32"),
+        ],
         cwd=tmp_path,
         env=env,
     )

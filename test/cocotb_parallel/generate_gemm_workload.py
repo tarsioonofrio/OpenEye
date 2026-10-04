@@ -15,8 +15,9 @@ from open_eye.layer_parameters import LayerParameters
 from open_eye.open_eye_parameters import OpenEyeParameters
 
 
-K = 32
-N = 32
+DEFAULT_M = 1
+DEFAULT_K = 32
+DEFAULT_N = 32
 SEED = 20261003
 
 
@@ -27,9 +28,11 @@ class _Shape:
 
 class _GemmLayer:
     name = "gemm"
-    input = _Shape([None, K])
-    output = _Shape([None, N])
-    kernel = _Shape([K, N])
+
+    def __init__(self, k: int, n: int):
+        self.input = _Shape([None, k])
+        self.output = _Shape([None, n])
+        self.kernel = _Shape([k, n])
 
 
 def _write_hex(path: Path, values: list[int], width: int) -> None:
@@ -40,7 +43,10 @@ def _write_hex(path: Path, values: list[int], width: int) -> None:
             output.write(f"{value & mask:0{digits}x}\n")
 
 
-def generate(output_dir: Path) -> dict[str, int]:
+def generate(output_dir: Path, m: int = DEFAULT_M, k: int = DEFAULT_K,
+             n: int = DEFAULT_N) -> dict[str, int]:
+    if min(m, k, n) < 1:
+        raise ValueError("GEMM dimensions M, K and N must be positive")
     output_dir.mkdir(parents=True, exist_ok=True)
     os.environ.update({
         "CLUSTER_COLUMNS": "2",
@@ -57,43 +63,67 @@ def generate(output_dir: Path) -> dict[str, int]:
     })
 
     rng = random.Random(SEED)
-    activations = [rng.randint(16, 31) for _ in range(K)]
-    weights = [[rng.randint(16, 31) for _ in range(K)] for _ in range(N)]
-    bias = [0] * N
-    expected = [
-        sum(weights[row][column] * activations[column] for column in range(K)) + bias[row]
-        for row in range(N)
-    ]
+    activations = [[rng.randint(16, 31) for _ in range(k)] for _ in range(m)]
+    weights = [[rng.randint(16, 31) for _ in range(k)] for _ in range(n)]
+    bias = [0] * n
 
     params = OpenEyeParameters(serial=True)
-    layer_params = LayerParameters([], _GemmLayer(), params, 0, 1)
-    mapper = GemmMapper(params, layer_params, 0,
-                        [activations, weights, bias], sparse_iacts=0, sparse_wghts=0)
-    mapper.make_stream()
-    stream = mapper.get_stream()
+    dma_streams = []
+    expected_stream = []
+    dma_words_per_row = None
+    output_words_per_row = None
+    outputs_per_cluster_column = None
+    for activation_row in activations:
+        layer_params = LayerParameters([], _GemmLayer(k, n), params, 0, 1)
+        mapper = GemmMapper(params, layer_params, 0,
+                            [activation_row, weights, bias], sparse_iacts=0, sparse_wghts=0)
+        mapper.make_stream()
+        stream = mapper.get_stream()
 
-    # Serial stream order is the FPGA DMA contract: configuration, activations,
-    # weights, zero bias, then quantization. No TensorFlow model is needed.
-    dma_words = []
-    for channel in range(5):
-        dma_words.extend(int(word) for word in stream[channel])
+        # Serial stream order is the FPGA DMA contract: configuration,
+        # activations, weights, bias, and quantization. The mapper leaves the
+        # unused serial slots empty; channels 0..4 are the actual host order.
+        row_dma_words = [int(word) for channel in range(5) for word in stream[channel]]
+        if dma_words_per_row is None:
+            dma_words_per_row = len(row_dma_words)
+            output_words_per_row = layer_params.psum_output_words
+            outputs_per_cluster_column = layer_params.used_psum_per_PE
+        elif len(row_dma_words) != dma_words_per_row:
+            raise ValueError("DMA stream length changed between GEMM rows")
+        dma_streams.extend(row_dma_words)
+
+        row_golden = [sum(weights[out][inner] * activation_row[inner]
+                          for inner in range(k)) + bias[out]
+                      for out in range(n)]
+        # Compare in the same cluster-interleaved order as the DMA output. The
+        # mapper may reserve padded filter slots when N is smaller than a tile.
+        for beat in range(output_words_per_row):
+            filter_index = ((beat % params.Clusters_X) * outputs_per_cluster_column
+                            + beat // params.Clusters_X)
+            expected_stream.append(row_golden[filter_index] if filter_index < n else 0)
+
+    dma_words = dma_streams
     _write_hex(output_dir / "gemm_dma_input.hex", dma_words, 64)
-    _write_hex(output_dir / "gemm_expected.hex", expected, 32)
+    _write_hex(output_dir / "gemm_expected.hex", expected_stream, 32)
 
     config = {
-        "dma_word_count": len(dma_words),
-        "output_count": len(expected),
-        "outputs_per_cluster_column": layer_params.used_psum_per_PE,
+        "dma_word_count": dma_words_per_row,
+        "output_count": output_words_per_row,
+        "matrix_rows": m,
+        "total_dma_word_count": len(dma_words),
+        "total_output_count": len(expected_stream),
+        "outputs_per_cluster_column": outputs_per_cluster_column,
         "cluster_columns": params.Clusters_X,
         "seed": SEED,
-        "k": K,
-        "n": N,
-        "gemm_mode": layer_params.gemm_mode,
+        "m": m,
+        "k": k,
+        "n": n,
+        "gemm_mode": 1,
     }
     with (output_dir / "gemm_workload.svh").open("w", encoding="ascii") as output:
         output.write("// Generated by generate_gemm_workload.py; do not edit.\n")
         for name, value in config.items():
-            if name in {"seed", "k", "n"}:
+            if name == "seed":
                 continue
             output.write(f"`define GEMM_{name.upper()} {value}\n")
     return config
@@ -102,10 +132,15 @@ def generate(output_dir: Path) -> dict[str, int]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("output_dir", type=Path)
+    parser.add_argument("--m", type=int, default=DEFAULT_M)
+    parser.add_argument("--k", type=int, default=DEFAULT_K)
+    parser.add_argument("--n", type=int, default=DEFAULT_N)
     args = parser.parse_args()
-    config = generate(args.output_dir)
-    print(f"Generated output-stationary GEMM K={config['k']} N={config['n']} seed={config['seed']}")
-    print(f"DMA words={config['dma_word_count']}, expected outputs={config['output_count']}")
+    config = generate(args.output_dir, m=args.m, k=args.k, n=args.n)
+    print(f"Generated output-stationary GEMM M={config['m']} K={config['k']} "
+          f"N={config['n']} seed={config['seed']}")
+    print(f"DMA words={config['total_dma_word_count']}, "
+          f"expected output beats={config['total_output_count']}")
 
 
 if __name__ == "__main__":
