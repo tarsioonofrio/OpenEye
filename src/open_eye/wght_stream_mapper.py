@@ -856,6 +856,12 @@ class DenseWghtStreamMapper(WghtStreamMapper):
                             except:
                                 # Only one cluster or no data
                                 wght_stream.append(0)
+        else:
+            # Parallel simulation consumes the per-cluster/router streams
+            # directly. Only the serial DMA path below needs to flatten,
+            # repack and reverse complete memory words.
+            return wght_stream
+
         chunk = params.Clusters * params.NUM_GLB_WGHT
         wght_stream = gtu.transform_n_to_m_chunked(wght_stream,params.WGHT_Trans_Bitwidth,params.DMA_BITWIDTH, chunk)
         n = layer_params.wght_cycles_one_word_all_ram
