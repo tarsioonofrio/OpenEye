@@ -63,7 +63,10 @@ USE_SPARSE_IACTS, USE_SPARSE_WGHTS, USE_RANDOM_VALUES, LOGGER_LEVEL, CLUSTER_ROW
         parameters={"CLUSTER_ROWS": CLUSTER_ROWS},
         testcase='single_layer_test',
         force_compile=True,
-        waves=True,
+        # Full traces can consume gigabytes on large feature maps. Enable
+        # them only for a focused debug run with OPENEYE_DUMP_WAVES=1.
+        waves=os.environ.get("OPENEYE_DUMP_WAVES", "0").lower()
+        in {"1", "true", "yes", "on"},
         **simulator_options(target_dir, hdl_dir, default="verilator"),
         extra_env = {"CLOCK_LEN" : str(clk_cycle)
                     ,"CLOCK_UNIT" : clk_cycle_unit
