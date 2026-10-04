@@ -94,7 +94,7 @@ USE_SPARSE_IACTS, USE_SPARSE_WGHTS, USE_RANDOM_VALUES, LOGGER_LEVEL, CLUSTER_ROW
 @pytest.mark.parametrize("INPUT_SIZE", [(7)])
 @pytest.mark.parametrize("INPUT_CHANNELS", [(10)])#, 4, 8])
 def test_single_pool_layer(STRIDE,KERNEL_SIZE_X,KERNEL_SIZE_Y,INPUT_SIZE,INPUT_CHANNELS,tmp_path):
-    layer = "MaxPooling"
+    layer = "Pooling"
     dut = 'OpenEye_Parallel'
     module = 'OpenEye_Parallel_tb'
     toplevel = dut
