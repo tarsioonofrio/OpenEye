@@ -863,11 +863,12 @@ class DenseIactStreamMapper(IactStreamMapper):
                     for router in range(params.NUM_GLB_IACT):
                         iact_stream[cl_x][cl_y][router] = self.write_iact_data_glb(cl_x, cl_y, router)
             iact_stream = self.create_complete_iact_stream(iact_stream)
+            return iact_stream
         else :
             iact_stream = []
             if (layer_params.skipIact == 0) :
                 iact_stream = pack_values_into_words(self.build_iact_buffer_words(), self.params, layer_params)
-        return buffer_words_to_dma_stream(iact_stream, self.layer_params)
+            return buffer_words_to_dma_stream(iact_stream, self.layer_params)
 
     def build_iact_buffer_words(self):
         """Raw 64-bit iact words in BUFFER_A cell order for a Dense layer.
