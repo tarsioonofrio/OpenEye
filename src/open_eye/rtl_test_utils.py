@@ -1466,6 +1466,26 @@ async def write_bias(ptp, dut, stream, oep, lp):
         - Supports parallel loading across multiple processing elements
         - Maintains proper synchronization with computation units
     """
+    # DensePsumStreamMapper emits one flat, cluster-column-interleaved bias
+    # stream. Convolution mappers emit the hierarchical
+    # [cluster_x][cluster_y][router][cycle] layout consumed below.
+    if stream and isinstance(stream[0], int):
+        for position in range(math.ceil(len(stream) / oep.Clusters_X)):
+            psum_transmission = 0
+            psum_enable = 0
+            for x_cluster in range(oep.Clusters_X):
+                stream_index = position * oep.Clusters_X + x_cluster
+                if stream_index < len(stream):
+                    lane = x_cluster * oep.NUM_GLB_PSUM
+                    psum_transmission |= stream[stream_index] << (lane * oep.PSUM_Trans_Bitwidth)
+                    psum_enable |= 1 << lane
+            cocotb.start_soon(set_input(ptp, dut.psum_data_i, psum_transmission))
+            cocotb.start_soon(set_input(ptp, dut.psum_enable_i, psum_enable))
+            await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+        cocotb.start_soon(set_input(ptp, dut.psum_data_i, 0))
+        cocotb.start_soon(set_input(ptp, dut.psum_enable_i, 0))
+        return
+
     psum_transmission = 0
     cocotb.start_soon(set_input(ptp,(dut.psum_enable_i), (2**(oep.Clusters_X*oep.Clusters_Y*oep.NUM_GLB_PSUM))-1))
     for position in range(len(stream[0][0][0])):
