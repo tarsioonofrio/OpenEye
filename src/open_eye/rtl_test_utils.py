@@ -261,7 +261,11 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
             ("iact_size_x_i", lp.iact_size_x),
             ("iact_channels_per_pe_i", lp.used_channels),
             ("iact_x_line_repetitions_i", lp.iact_x_line_repetitions),
-            ("kernel_size_y_i", lp.kernel_size[1]),
+            # Dense/GEMM layers use a one-entry kernel_size sentinel because
+            # they have no spatial kernel. Preserve that configured value for
+            # the optional RTL port instead of indexing a nonexistent y entry.
+            ("kernel_size_y_i", lp.kernel_size[1] if len(lp.kernel_size) > 1
+             else lp.kernel_size[0]),
         ):
             if hasattr(dut, port_name):
                 cocotb.start_soon(set_input(ptp, getattr(dut, port_name), value))
