@@ -90,8 +90,17 @@ module OpenEye_FPGA_gemm_workload_tb;
         end
       end
       if (output_index != `GEMM_OUTPUT_COUNT)
-        $fatal(1, "GEMM row %0d output count %0d, expected %0d (FSM=%0d)",
-               row_index, output_index, `GEMM_OUTPUT_COUNT, dut.fsm_current_state);
+        $fatal(1, "GEMM row %0d output count %0d, expected %0d "
+               "(FPGA FSM=%0d, Parallel FSM=%0d, finished=%0d, needed=%0d, "
+               "compute=%b, wght_enable=%h, psum_enable=%h, psum_ready=%h, "
+               "psum_fsm=%0d, psum_transmitted=%b)",
+               row_index, output_index, `GEMM_OUTPUT_COUNT, dut.fsm_current_state,
+               dut.OpenEye_Parallel.fsm_current_state,
+               dut.OpenEye_Parallel.finished_cycles,
+               dut.OpenEye_Parallel.needed_cycles_i_reg,
+               dut.compute_reg, dut.wght_enable_i_reg,
+               dut.psum_enable_o, dut.psum_ready_o_reg,
+               dut.fsm_psum_current_state, dut.psum_transmitted);
       if (dut.OpenEye_Parallel.gemm_mode_reg !== 1'b1)
         $fatal(1, "DMA workload did not configure output-stationary GEMM mode");
 
