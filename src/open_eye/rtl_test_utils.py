@@ -3181,10 +3181,6 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
         cocotb.start_soon(send_enable_dense(
             ptp, dut, layer_parameters, layer_repetition, oep
         ))
-        await _wait_for_signal(
-            ptp, dut.psum_enable_o, name="psum_enable_o",
-            context=" before dense core output", dut=dut,
-        )
         columns = oep.Clusters_X
         rows = oep.Clusters_Y
         per_column = math.ceil(layer_parameters.used_psum_per_PE)
@@ -3193,6 +3189,41 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
         tile_offset = tile * columns * rows * per_column
         output_count = 0
         cycles = math.ceil(per_column / oep.PARALLEL_MACS)
+        try:
+            await _wait_for_signal(
+                ptp, dut.psum_enable_o, name="psum_enable_o",
+                context=" before dense core output", dut=dut,
+            )
+        except TimeoutError:
+            def signal(name):
+                try:
+                    return str(getattr(dut, name).value)
+                except Exception:
+                    return "?"
+            logger.error(
+                "Dense core state: fsm=%s finished=%s needed=%s compute_cluster=%s "
+                "compute_mask=%s psum_transmitted=%s psum_ready_i=%s "
+                "psum_enable_i=%s psum_enable_o=%s psum_ready_o=%s",
+                signal("fsm_current_state"), signal("finished_cycles"),
+                signal("needed_cycles_i_reg"), signal("compute_cluster_i_reg"),
+                signal("compute_mask_reg"), signal("psum_transmitted_i"),
+                signal("psum_ready_i"), signal("psum_enable_i"),
+                signal("psum_enable_o"), signal("psum_ready_o"),
+            )
+            for cl_y in range(rows):
+                for cl_x in range(columns):
+                    try:
+                        cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+                        states = [str(cluster.pe_cluster.gen_X[pe_x].gen_Y[pe_y]
+                                      .pe.current_state_computing.value)
+                                  for pe_y in range(oep.PEs_Y)
+                                  for pe_x in range(oep.PEs_X)]
+                        logger.error("Dense core cluster(%d,%d) PE states=%s",
+                                     cl_x, cl_y, states)
+                    except Exception as exc:
+                        logger.error("Dense core cluster(%d,%d) state unreadable: %s",
+                                     cl_x, cl_y, type(exc).__name__)
+            raise
         for psum_pe in range(cycles):
             enable_value = int(dut.psum_enable_o.value)
             for cl_y in range(rows):
