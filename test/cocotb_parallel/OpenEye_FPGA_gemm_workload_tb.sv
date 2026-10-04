@@ -70,27 +70,17 @@ module OpenEye_FPGA_gemm_workload_tb;
     ready_dma_i = 1'b1;
     output_index = 0;
     cycle_index = 0;
-    while (!enable_dma_o && cycle_index < 200000) begin
-      @(posedge clk_i);
-      cycle_index = cycle_index + 1;
-      if ((cycle_index % 10000) == 0)
-        $display("GEMM waiting for output: cycles=%0d FSM=%0d state_cycle=%0d",
-                 cycle_index, dut.fsm_current_state, dut.fsm_cycle);
-    end
-    if (!enable_dma_o)
-      $fatal(1, "GEMM workload timed out before the first output word (FSM=%0d cycle=%0d)",
-             dut.fsm_current_state, dut.fsm_cycle);
-
+    // Sample after the DUT's rising-edge nonblocking assignments have settled.
+    // ready_dma_i stays high, so each valid cycle is accepted at the next edge.
     while (output_index < `GEMM_OUTPUT_COUNT && cycle_index < 400000) begin
-      @(posedge clk_i);
+      @(negedge clk_i);
+      cycle_index = cycle_index + 1;
       if (enable_dma_o) begin
-        // DMA interleaves cluster columns. In the current two-column
-        // configuration, column 0 emits filters 16..31 and column 1 emits
-        // filters 1..15; the missing filter 0 is caught by the final count.
-        if ((output_index % `GEMM_CLUSTER_COLUMNS) == 0)
-          output_filter = `GEMM_OUTPUTS_PER_CLUSTER_COLUMN + output_index / `GEMM_CLUSTER_COLUMNS;
-        else
-          output_filter = 1 + output_index / `GEMM_CLUSTER_COLUMNS;
+        // Match rtl_test_utils.compare_stream_Dense: cluster columns are
+        // interleaved for each psum address in the DMA output stream.
+        output_filter = (output_index % `GEMM_CLUSTER_COLUMNS)
+                        * `GEMM_OUTPUTS_PER_CLUSTER_COLUMN
+                        + output_index / `GEMM_CLUSTER_COLUMNS;
         actual_value = $signed(data_dma_o[19:0]);
         expected_value = $signed(expected_mem[output_filter]);
         if (actual_value !== expected_value)
@@ -98,7 +88,6 @@ module OpenEye_FPGA_gemm_workload_tb;
                  output_index, output_filter, actual_value, expected_value);
         output_index = output_index + 1;
       end
-      cycle_index = cycle_index + 1;
     end
     if (output_index != `GEMM_OUTPUT_COUNT)
       $fatal(1, "GEMM output count %0d, expected %0d (FSM=%0d)",
