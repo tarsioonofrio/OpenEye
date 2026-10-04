@@ -322,7 +322,7 @@ class DenseMapper(LayerMapper):
             storage[strdic.status_dict["skipIact"]] = layer_params.skipIact
             storage[strdic.status_dict["skipWght"]] = layer_params.skipWght
             storage[strdic.status_dict["skipPsum"]] = layer_params.skipPsum
-            storage[strdic.status_dict["usePEs"]] = int(computing_pes,2)
+            storage[strdic.status_dict["usePEs"]] = computing_pes
             storage[strdic.status_dict["kernel_per_pe_cluster"]] = layer_params.kernel_per_pe_cluster
             storage[strdic.status_dict["gemm_mode"]] = getattr(layer_params, "gemm_mode", 0)
             # Router configurations as nested structures for parallel access

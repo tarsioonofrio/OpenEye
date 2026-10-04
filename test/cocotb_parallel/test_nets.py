@@ -10,10 +10,12 @@ import cocotb
 import cocotb_test.simulator
 import pytest
 import cocotb_test.simulator
+import open_eye.vh_file_creator as vh_file_creator
 logger = logging.getLogger("cocotb")
 
 directory = (os.path.abspath(os.getcwd()))
 sys.path.extend([directory, os.path.dirname(os.path.realpath(__file__))])
+from sim_utils import simulator_options
 tests_dir = os.path.abspath(os.path.dirname(__file__))
 hdl_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), os.pardir, os.pardir, "hdl")
 
@@ -34,15 +36,14 @@ clk_delay_unit_out = "ps"
 ##########################################################################################
 
 @pytest.mark.parametrize("DNN", [(1)])#, 11, 32, 33, 63])
-def test_net(DNN):
+def test_net(DNN, tmp_path):
 
     dut = 'OpenEye_Parallel'
     module = 'model_tb'
     toplevel = dut
     verilog_sources = ptu.get_verilog_sources(hdl_dir)
 
-    target_dir = os.path.join(tests_dir, '.temp') 
-    os.makedirs(target_dir, exist_ok=True)
+    target_dir = os.fspath(tmp_path)
     # PE.v and PE_cluster.v `include their own parameter headers; generate
     # them into sim_build so Icarus finds them next to the other sources.
     vh_file_creator.create_vh_file_from_envvars(
@@ -60,7 +61,7 @@ def test_net(DNN):
         testcase='model_test',
         force_compile=True,
         #waves=True,
-        simulator="icarus",
+        **simulator_options(target_dir, hdl_dir, default="icarus"),
         extra_env = {"CLOCK_LEN" : str(clk_cycle)
                     ,"CLOCK_UNIT" : clk_cycle_unit
                     ,"CLOCK_DELAY_INPUT" : str(clk_delay_in)

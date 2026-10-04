@@ -84,7 +84,9 @@ def test_full_system_gemm_workload_sv(tmp_path):
         if path.suffix in {".v", ".sv"} and path.name not in {"OpenEye_FPGA.v", "dma_storage.v"}
     )
     sources.extend([HDL_DIR / "OpenEye_FPGA.v", tmp_path / "dma_storage.v"])
-    include_args = [f"-I{HDL_DIR / 'include'}", f"-I{tmp_path}"]
+    include_args = [f"-I{tmp_path}"]
+    xcelium_tmp = tmp_path / "xcelium_tmp"
+    xcelium_tmp.mkdir(exist_ok=True)
     if simulator == "icarus":
         executable = tmp_path / "gemm_workload.vvp"
         command = [
@@ -106,9 +108,10 @@ def test_full_system_gemm_workload_sv(tmp_path):
         output = _run([str(obj_dir / f"V{TOPLEVEL}")], cwd=tmp_path, env=env)
     else:
         command = [
-            "xrun", "-64", "-sv", "-access", "+rwc", "-top", TOPLEVEL,
+            "xrun", "-64", "-sv", "-access", "+rwc",
+            "-cds_alternate_tmpdir", str(xcelium_tmp), "-top", TOPLEVEL,
             *sum((["-define", define] for define in DEFINES), []),
-            "-incdir", str(HDL_DIR / "include"), "-incdir", str(tmp_path),
+            "-incdir", str(tmp_path),
             *map(str, sources), str(TB_FILE),
         ]
         output = _run(command, cwd=tmp_path, env=env)

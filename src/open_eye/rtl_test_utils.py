@@ -135,8 +135,19 @@ async def reset_all_signals(ptp, dut, serial):
 
         # Activation configuration
         cocotb.start_soon(set_input(ptp,(dut.input_activations_i), 0))
-        cocotb.start_soon(set_input(ptp,(dut.iact_write_addr_t_i), 0))
-        cocotb.start_soon(set_input(ptp,(dut.iact_write_data_t_i), 0))
+        # Older tops exposed explicit activation address/data length ports.
+        # OpenEye_Parallel now receives these fields through its config stream.
+        for port_name in ("iact_write_addr_t_i", "iact_write_data_t_i"):
+            if hasattr(dut, port_name):
+                cocotb.start_soon(set_input(ptp, getattr(dut, port_name), 0))
+        for port_name in (
+            "iact_size_x_i",
+            "iact_channels_per_pe_i",
+            "iact_x_line_repetitions_i",
+            "kernel_size_y_i",
+        ):
+            if hasattr(dut, port_name):
+                cocotb.start_soon(set_input(ptp, getattr(dut, port_name), 0))
 
         # Convolution parameters
         # stride_x_i/stride_y_i were dropped from OpenEye_Parallel in 4cc9e07;
@@ -146,6 +157,14 @@ async def reset_all_signals(ptp, dut, serial):
         # Processing element control
         cocotb.start_soon(set_input(ptp,(dut.compute_mask_i), 0))
 
+        # These source selectors are direct inputs on OpenEye_Parallel. The
+        # FPGA wrapper drives them from its stream configurators, but the
+        # Cocotb top-level test does not have that wrapper. Select GLB 0 as
+        # the deterministic default and route PSUM through the PE router.
+        for port_name in ("iact_choose_i", "psum_choose_i"):
+            if hasattr(dut, port_name):
+                cocotb.start_soon(set_input(ptp, getattr(dut, port_name), 0))
+
         # Router configuration for data distribution
         cocotb.start_soon(set_input(ptp,(dut.router_mode_iact_i), 0))
         cocotb.start_soon(set_input(ptp,(dut.router_mode_wght_i), 0))
@@ -154,7 +173,9 @@ async def reset_all_signals(ptp, dut, serial):
         # Serial/DMA mode: reset DMA interface signals
         cocotb.start_soon(set_input(ptp,(dut.data_dma_i), 0))
         cocotb.start_soon(set_input(ptp,(dut.enable_dma_i), 0))
-    cocotb.start_soon(set_input(ptp,(dut.ready_dma_i), 0))
+    # ready_dma_i belongs to the serial wrapper, not OpenEye_Parallel.
+    if hasattr(dut, "ready_dma_i"):
+        cocotb.start_soon(set_input(ptp,dut.ready_dma_i, 0))
 
     # Hold reset for one clock cycle
     await Timer(ptp.clk_cycle, ptp.clk_cycle_unit)
@@ -207,7 +228,13 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
 
         # Computation control parameters
         cocotb.start_soon(set_input(ptp,(dut.needed_cycles_i), stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["needed_refreshes"]]))
-        cocotb.start_soon(set_input(ptp,(dut.needed_x_cls_i), stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["used_X_cluster"]]))
+        # used_X_cluster includes Y-cluster packages in the Python mapper,
+        # while this legacy RTL port is sized only for CLUSTER_COLUMNS.
+        needed_x_clusters = min(
+            stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["used_X_cluster"]],
+            oep.Clusters_X,
+        )
+        cocotb.start_soon(set_input(ptp,(dut.needed_x_cls_i), needed_x_clusters))
         cocotb.start_soon(set_input(ptp,(dut.needed_y_cls_i), stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["used_Y_cluster"]]))
         cocotb.start_soon(set_input(ptp,(dut.needed_iact_cycles_i), stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["needed_Iact_writes"]]))
 
@@ -224,8 +251,20 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
 
         # Input activation configuration
         cocotb.start_soon(set_input(ptp,(dut.input_activations_i), stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["used_iact_per_PE"]]))
-        cocotb.start_soon(set_input(ptp,(dut.iact_write_addr_t_i), stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["iact_addr_len"]]))
-        cocotb.start_soon(set_input(ptp,(dut.iact_write_data_t_i), stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["iact_data_len"]]))
+        # Keep compatibility with legacy tops while driving the current
+        # OpenEye_Parallel activation configuration directly from layer params.
+        if hasattr(dut, "iact_write_addr_t_i"):
+            cocotb.start_soon(set_input(ptp,dut.iact_write_addr_t_i, stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["iact_addr_len"]]))
+        if hasattr(dut, "iact_write_data_t_i"):
+            cocotb.start_soon(set_input(ptp,dut.iact_write_data_t_i, stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["iact_data_len"]]))
+        for port_name, value in (
+            ("iact_size_x_i", lp.iact_size_x),
+            ("iact_channels_per_pe_i", lp.used_channels),
+            ("iact_x_line_repetitions_i", lp.iact_x_line_repetitions),
+            ("kernel_size_y_i", lp.kernel_size[1]),
+        ):
+            if hasattr(dut, port_name):
+                cocotb.start_soon(set_input(ptp, getattr(dut, port_name), value))
 
         # Convolution stride parameters
         # stride_x_i/stride_y_i were dropped from OpenEye_Parallel in 4cc9e07;
@@ -249,11 +288,11 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
             for cl_y in range(oep.Clusters_Y):
                 for router in range(oep.NUM_GLB_IACT):
                     # Pack router modes: each router gets its own bit field
-                    # Bit position = (router + routers_per_cluster * cl_y + routers_per_row * cl_x) * bits_per_router
+                    # The RTL flattens clusters with X as the inner dimension.
                     router_mode_port = router_mode_port + (stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["router_iact"]][cl_x][cl_y][router] << \
                                                         (oep.Iact_Router_Bits * router + \
-                                                            oep.Iact_Router_Bits * oep.NUM_GLB_IACT * cl_y + \
-                                                            oep.Iact_Router_Bits * oep.NUM_GLB_IACT * oep.Clusters_Y * cl_x))
+                                                            oep.Iact_Router_Bits * oep.NUM_GLB_IACT * cl_x + \
+                                                            oep.Iact_Router_Bits * oep.NUM_GLB_IACT * oep.Clusters_X * cl_y))
         cocotb.start_soon(set_input(ptp,(dut.router_mode_iact_i), router_mode_port))
 
         # Set router mode for weights
@@ -263,8 +302,8 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
                 for router in range(oep.NUM_GLB_WGHT):
                     router_mode_port = router_mode_port + (stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["router_wght"]][cl_x][cl_y][router] << \
                                                         (oep.Wght_Router_Bits * router + \
-                                                            oep.Wght_Router_Bits * oep.NUM_GLB_WGHT * cl_y + \
-                                                            oep.Wght_Router_Bits * oep.NUM_GLB_WGHT * oep.Clusters_Y * cl_x))
+                                                            oep.Wght_Router_Bits * oep.NUM_GLB_WGHT * cl_x + \
+                                                            oep.Wght_Router_Bits * oep.NUM_GLB_WGHT * oep.Clusters_X * cl_y))
         cocotb.start_soon(set_input(ptp,(dut.router_mode_wght_i), router_mode_port))
 
         # Set router mode for partial sums
@@ -274,8 +313,8 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
                 for router in range(oep.NUM_GLB_PSUM):
                     router_mode_port = router_mode_port + (stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["router_psum"]][cl_x][cl_y][router] << \
                                                         (oep.Psum_Router_Bits * router + \
-                                                            oep.Psum_Router_Bits * oep.NUM_GLB_PSUM * cl_y + \
-                                                            oep.Psum_Router_Bits * oep.NUM_GLB_PSUM * oep.Clusters_Y * cl_x))
+                                                            oep.Psum_Router_Bits * oep.NUM_GLB_PSUM * cl_x + \
+                                                            oep.Psum_Router_Bits * oep.NUM_GLB_PSUM * oep.Clusters_X * cl_y))
         cocotb.start_soon(set_input(ptp,(dut.router_mode_psum_i), router_mode_port))
         router_mode_port = 0
 
@@ -1333,8 +1372,8 @@ async def write_iact(ptp, dut, stream, oep, lp):
                         try:
                             iact_transmission = iact_transmission + \
                             (stream[x_cluster][y_cluster][router][position] \
-                            << ((router + y_cluster * oep.NUM_GLB_IACT + x_cluster * oep.NUM_GLB_IACT * oep.Clusters_Y) * oep.IACT_Trans_Bitwidth))
-                            iact_enable_signal = iact_enable_signal + 2**(router + y_cluster * oep.NUM_GLB_IACT+ x_cluster * oep.NUM_GLB_IACT * oep.Clusters_Y)
+                            << ((router + x_cluster * oep.NUM_GLB_IACT + y_cluster * oep.NUM_GLB_IACT * oep.Clusters_X) * oep.IACT_Trans_Bitwidth))
+                            iact_enable_signal = iact_enable_signal + 2**(router + x_cluster * oep.NUM_GLB_IACT + y_cluster * oep.NUM_GLB_IACT * oep.Clusters_X)
                         except:
                             iact_enable_signal = iact_enable_signal
             cocotb.start_soon(set_input(ptp,(dut.iact_data_i), iact_transmission))
@@ -1385,8 +1424,8 @@ async def write_wght(ptp, dut, stream, oep, lp):
                         try:
                             wght_transmission = wght_transmission + \
                             (stream[x_cluster][y_cluster][router][position] \
-                            << ((router + y_cluster * oep.NUM_GLB_WGHT + x_cluster * oep.NUM_GLB_WGHT * oep.Clusters_Y) * oep.WGHT_Trans_Bitwidth))
-                            wght_enable_signal = wght_enable_signal + 2**(router + y_cluster * oep.NUM_GLB_WGHT+ x_cluster * oep.NUM_GLB_WGHT * oep.Clusters_Y)
+                            << ((router + x_cluster * oep.NUM_GLB_WGHT + y_cluster * oep.NUM_GLB_WGHT * oep.Clusters_X) * oep.WGHT_Trans_Bitwidth))
+                            wght_enable_signal = wght_enable_signal + 2**(router + x_cluster * oep.NUM_GLB_WGHT + y_cluster * oep.NUM_GLB_WGHT * oep.Clusters_X)
                         except:
                             wght_enable_signal = wght_enable_signal
             cocotb.start_soon(set_input(ptp,(dut.wght_data_i), wght_transmission))
@@ -1431,7 +1470,7 @@ async def write_bias(ptp, dut, stream, oep, lp):
                 for router in range(oep.NUM_GLB_PSUM):
                     psum_transmission = psum_transmission + \
                     (stream[x_cluster][y_cluster][router][position] \
-                    << ((router + y_cluster * oep.NUM_GLB_PSUM + x_cluster * oep.NUM_GLB_PSUM * oep.Clusters_Y) * oep.PSUM_Trans_Bitwidth))
+                    << ((router + x_cluster * oep.NUM_GLB_PSUM + y_cluster * oep.NUM_GLB_PSUM * oep.Clusters_X) * oep.PSUM_Trans_Bitwidth))
         cocotb.start_soon(set_input(ptp,(dut.psum_data_i), psum_transmission))
         psum_transmission = 0
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
@@ -1459,6 +1498,34 @@ def _signal_is(handle, expected):
         return int(handle.value) == expected
     except ValueError:
         return False
+
+
+def _max_wait_cycles(default=2000000):
+    try:
+        return int(os.environ.get("OPENEYE_MAX_WAIT_CYCLES", default))
+    except ValueError as exc:
+        raise ValueError("OPENEYE_MAX_WAIT_CYCLES must be an integer") from exc
+
+
+async def _wait_for_signal(ptp, handle, *, name, expected=None, context="", dut=None):
+    """Wait for a signal value or assertion, with a diagnostic cycle bound."""
+    max_cycles = _max_wait_cycles()
+    for _ in range(max_cycles):
+        try:
+            value = int(handle.value)
+        except (TypeError, ValueError):
+            value = None
+        if value is not None and (
+            (value != 0) if expected is None else (value == expected)
+        ):
+            return value
+        await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+    condition = "nonzero" if expected is None else str(expected)
+    state = _fsm_state_note(dut) if dut is not None else ""
+    raise TimeoutError(
+        f"{name} did not become {condition} within {max_cycles} cycles"
+        f"{context}{state}"
+    )
 
 
 async def await_ready_signal(ptp, dut, settle_cycles=5000, max_wait_cycles=2000000,
@@ -1580,11 +1647,15 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
     if (oep.SERIAL == 0) :
         if ((layer_repetition % layer_parameters.iact_transmissions_pe) == (layer_parameters.iact_transmissions_pe - 1)):
             cocotb.start_soon(send_enable_conv(ptp, dut, layer_parameters, layer_repetition, oep))
-            while (dut.psum_enable_o.value == 0):
-                await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+            await _wait_for_signal(
+                ptp, dut.psum_enable_o, name="psum_enable_o",
+                context=" before convolution output", dut=dut,
+            )
             dut._log.info("Output Stream started")
             assert dut.psum_enable_o.value != 0, "psum is not 1!"
-            while (dut.psum_enable_o.value != 0):
+            for _ in range(_max_wait_cycles()):
+                if _signal_is(dut.psum_enable_o, 0):
+                    break
                 cluster_order = []
                 for a in range(layer_parameters.used_Y_cluster):
                     for b in range(0,oep.Clusters_Y,layer_parameters.used_Y_cluster):
@@ -1593,28 +1664,35 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                     for x_cluster in reversed(range(oep.Clusters_X)):
                         for router in reversed(range(oep.NUM_GLB_PSUM)):
                             if(layer_parameters.computing_mx[oep.Clusters_X-x_cluster-1][oep.Clusters_Y-y_cluster-1][0][oep.NUM_GLB_PSUM-router-1]== 1):
-                                lower_limit = (x_cluster * oep.Clusters_Y * oep.NUM_GLB_PSUM * self.PSUM_Trans_Bitwidth + y_cluster * oep.NUM_GLB_PSUM * self.PSUM_Trans_Bitwidth + router * self.PSUM_Trans_Bitwidth)
-                                upper_limit = lower_limit + oep.DATA_PSUM_BITWIDTH
-                                outputvalue = dut.psum_data_o.value[lower_limit:upper_limit]
-                                if(logging.DEBUG >= login_level):
-                                    txt_file.write(bin(outputvalue)[2:].zfill(self.PSUM_Trans_Bitwidth) + "\n")
-                                for i in range(self.PARALLEL_MACS):
-                                    try:
-                                        f = output_order[layer_repetition][les.current_position][0]
-                                        x = output_order[layer_repetition][les.current_position][1]
-                                        y = output_order[layer_repetition][les.current_position][2]
-                                    except:
-                                        pass
+                                output_lane = ((y_cluster * oep.Clusters_X + x_cluster) * oep.NUM_GLB_PSUM + router)
+                                if dut.psum_enable_o.value[output_lane] != 1:
+                                    continue
+                                lower_limit = ((y_cluster * oep.Clusters_X + x_cluster) * oep.NUM_GLB_PSUM + router) * oep.PSUM_Trans_Bitwidth
+                                upper_limit = lower_limit + oep.PSUM_Trans_Bitwidth
+                                psum_output = dut.psum_data_o.value
+                                try:
+                                    outputvalue = int(psum_output[upper_limit - 1:lower_limit])
+                                except ValueError:
+                                    outputvalue = None
+                                if(logging.DEBUG >= login_level and outputvalue is not None):
+                                    txt_file.write(bin(outputvalue)[2:].zfill(oep.PSUM_Trans_Bitwidth) + "\n")
+                                for i in range(oep.PARALLEL_MACS):
+                                    f, x, y = output_order[layer_repetition][les.current_position]
                                     les.current_position = les.current_position + 1
                                     if(logging.DEBUG >= login_level):
                                         storage_file.write("f: " + str(f) + " x: " + str(x) + " y: " + str(y) + "\n")
-                                    try:
-                                        dram.fmap[layer_number + 1][f][x][y] = int(dut.psum_data_o.value[lower_limit+oep.DATA_PSUM_BITWIDTH*(1-i):upper_limit-oep.DATA_PSUM_BITWIDTH*i])
-                                        if (dram.fmap[layer_number + 1][f][x][y] >= 2**(oep.DATA_PSUM_BITWIDTH-1)) :
-                                            dram.fmap[layer_number + 1][f][x][y] = dram.fmap[layer_number + 1][f][x][y] - 2**oep.DATA_PSUM_BITWIDTH
-                                    except:
-                                        pass
+                                    word_shift = lower_limit + oep.DATA_PSUM_BITWIDTH * (oep.PARALLEL_MACS - 1 - i)
+                                    word_high = word_shift + oep.DATA_PSUM_BITWIDTH - 1
+                                    value = int(psum_output[word_high:word_shift])
+                                    if value >= 2**(oep.DATA_PSUM_BITWIDTH - 1):
+                                        value -= 2**oep.DATA_PSUM_BITWIDTH
+                                    dram.fmap[layer_number + 1][f][x][y] = value
                 await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+            else:
+                raise TimeoutError(
+                    "psum_enable_o remained asserted while collecting convolution "
+                    f"output{_fsm_state_note(dut)}"
+                )
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
         cocotb.start_soon(set_input(ptp,(dut.psum_enable_i), 0))
         dut._log.info("Output Stream finished")
@@ -1643,7 +1721,9 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
         x_repetitions = layer_parameters.iact_x_line_repetitions
         x_block_width = layer_parameters.iact_x_add_up // max(x_repetitions, 1)
         x_block_base = 0
-        while (dut.enable_dma_o.value == 1):
+        for _ in range(_max_wait_cycles()):
+            if not _signal_is(dut.enable_dma_o, 1):
+                break
             if (read_data):
                 if(logging.DEBUG >= login_level):
                     try:
@@ -1707,6 +1787,11 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                 read_data = 0
                 cocotb.start_soon(set_input(ptp,(dut.ready_dma_i), 0))
             await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+        else:
+            raise TimeoutError(
+                "enable_dma_o remained asserted while collecting convolution "
+                f"output{_fsm_state_note(dut)}"
+            )
 
         cocotb.start_soon(set_input(ptp,(dut.ready_dma_i), 0))
 
@@ -1767,42 +1852,51 @@ async def compare_stream_Dw(ptp, dut, layer_number, model, layer_repetition, lay
     if(logging.DEBUG >= login_level):
         storage_file.write(" f_corner_start: " + str(les.f_corner_start) + " y_corner_start: " + str(les.y_corner_start) + " x_corner_start: " + str(les.x_corner_start) + "\n")
     cocotb.start_soon(send_enable_dw(ptp, dut, layer_parameters, layer_repetition, oep))
-    words = (oep.DMA_BITWIDTH//oep.DATA_PSUM_BITWIDTH)
-    while (dut.psum_enable_o.value == 0):
-        await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+    words = oep.PARALLEL_MACS
+    await _wait_for_signal(
+        ptp, dut.psum_enable_o, name="psum_enable_o",
+        context=" before depthwise output", dut=dut,
+    )
     dut._log.info("Output Stream started")
     assert dut.psum_enable_o.value != 0, "psum is not 1!"
-    while (dut.psum_enable_o.value != 0):
+    for _ in range(_max_wait_cycles()):
+        if _signal_is(dut.psum_enable_o, 0):
+            break
         for y_cluster in reversed(range(oep.Clusters_Y)):
             for x_cluster in reversed(range(oep.Clusters_X)):
                 for router in reversed(range(oep.NUM_GLB_PSUM)):
                     if(layer_parameters.computing_mx[oep.Clusters_X-x_cluster-1][oep.Clusters_Y-y_cluster-1][0][oep.NUM_GLB_PSUM-router-1]== 1):
-                        lower_limit = (x_cluster * oep.Clusters_Y * oep.NUM_GLB_PSUM * self.PSUM_Trans_Bitwidth + y_cluster * oep.NUM_GLB_PSUM * self.PSUM_Trans_Bitwidth + router * self.PSUM_Trans_Bitwidth)
-                        upper_limit = lower_limit - 1
-                        for _ in range(words - 1):
-                            upper_limit = lower_limit + self.PSUM_Trans_Bitwidth - 1
-                        outputvalue = dut.psum_data_o.value[lower_limit:upper_limit]
+                        output_lane = ((y_cluster * oep.Clusters_X + x_cluster) * oep.NUM_GLB_PSUM + router)
+                        if dut.psum_enable_o.value[output_lane] != 1:
+                            continue
+                        lower_limit = ((y_cluster * oep.Clusters_X + x_cluster) * oep.NUM_GLB_PSUM + router) * oep.PSUM_Trans_Bitwidth
+                        upper_limit = lower_limit + oep.PSUM_Trans_Bitwidth
+                        psum_output = dut.psum_data_o.value
+                        try:
+                            outputvalue = int(psum_output[upper_limit - 1:lower_limit])
+                        except ValueError:
+                            outputvalue = None
 
-                        if(logging.DEBUG >= login_level):
+                        if(logging.DEBUG >= login_level and outputvalue is not None):
                             txt_file.write(bin(outputvalue)[2:].zfill(oep.DMA_BITWIDTH) + "\n")
                         for i in range(words):
-                            try:
-                                f = output_order[layer_repetition][les.current_position][0]
-                                x = output_order[layer_repetition][les.current_position][1]
-                                y = output_order[layer_repetition][les.current_position][2]
-                            except:
-                                pass
+                            f, x, y = output_order[layer_repetition][les.current_position]
                             les.current_position = les.current_position + 1
                             if(logging.DEBUG >= login_level):
                                 storage_file.write("f: " + str(f) + " x: " + str(x) + " y: " + str(y) + "\n")
-                            try:
-                                dram.fmap[layer_number + 1][f][x][y] = int(dut.psum_data_o.value[lower_limit+oep.DATA_PSUM_BITWIDTH*(1-i):upper_limit-oep.DATA_PSUM_BITWIDTH*i])
-                                if (dram.fmap[layer_number + 1][f][x][y] >= 2**(oep.DATA_PSUM_BITWIDTH-1)) :
-                                    dram.fmap[layer_number + 1][f][x][y] = dram.fmap[layer_number + 1][f][x][y] - 2**oep.DATA_PSUM_BITWIDTH
-                            except:
-                                pass
+                            word_shift = lower_limit + oep.DATA_PSUM_BITWIDTH * (words - 1 - i)
+                            word_high = word_shift + oep.DATA_PSUM_BITWIDTH - 1
+                            value = int(psum_output[word_high:word_shift])
+                            if value >= 2**(oep.DATA_PSUM_BITWIDTH - 1):
+                                value -= 2**oep.DATA_PSUM_BITWIDTH
+                            dram.fmap[layer_number + 1][f][x][y] = value
 
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+    else:
+        raise TimeoutError(
+            "psum_enable_o remained asserted while collecting depthwise output"
+            f"{_fsm_state_note(dut)}"
+        )
     #if (math.floor(((1+layer_repetition)/layer_parameters.psum_transmissions_pe)) > math.floor((layer_repetition/layer_parameters.psum_transmissions_pe))):
     les.current_position = 0
     await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
@@ -3070,7 +3164,9 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
         "Dense DMA output count disagrees with column/address layout")
     beat = 0
     dut._log.info("Output Stream started")
-    while dut.enable_dma_o.value == 1:
+    for _ in range(_max_wait_cycles()):
+        if not _signal_is(dut.enable_dma_o, 1):
+            break
         assert beat < expected_words, "Dense DMA emitted too many words"
         # Do not swallow unknown data or indexing errors: that hid missing
         # outputs as zeros in the old two-column-only reader.
@@ -3089,6 +3185,11 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
             logger.info("Dense DMA beat=%d f=%d value=%d", beat, f, value)
         beat += 1
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+    else:
+        raise TimeoutError(
+            "enable_dma_o remained asserted while collecting dense output"
+            f"{_fsm_state_note(dut)}"
+        )
     assert beat == expected_words, (
         f"Dense DMA emitted {beat} words, expected {expected_words}")
 
@@ -3142,9 +3243,15 @@ async def compare_stream_Pooling(ptp, dut, layer_number, layer_repetition, layer
 
     f = 0
     dut._log.info("Output Stream started")
-    while (dut.enable_dma_o.value == 1):
-
+    for _ in range(_max_wait_cycles()):
+        if not _signal_is(dut.enable_dma_o, 1):
+            break
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+    else:
+        raise TimeoutError(
+            "enable_dma_o remained asserted while collecting pooling output"
+            f"{_fsm_state_note(dut)}"
+        )
 
     cocotb.start_soon(set_input(ptp,(dut.ready_dma_i), 0))
     

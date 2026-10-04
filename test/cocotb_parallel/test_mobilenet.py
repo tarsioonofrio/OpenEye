@@ -8,10 +8,12 @@ import sys
 
 import pytest
 import cocotb_test.simulator
+import open_eye.vh_file_creator as vh_file_creator
 logger = logging.getLogger("cocotb")
 
 directory = (os.path.abspath(os.getcwd()))
 sys.path.extend([directory, os.path.dirname(os.path.realpath(__file__))])
+from sim_utils import simulator_options
 tests_dir = os.path.abspath(os.path.dirname(__file__))
 hdl_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), os.pardir, os.pardir, "hdl")
 
@@ -106,9 +108,12 @@ def test_mobilnet(LAYER_NUMBER):
     input_size = input_size_array[LAYER_NUMBER]
     input_channels = input_channel_array[LAYER_NUMBER]
 
-    verilog_sources = ptu.get_verilog_sources(hdl_dir, 0)
+    verilog_sources = ptu.get_verilog_sources(hdl_dir)
 
     target_dir = os.path.join(tests_dir, 'simulation/layer_' + str(LAYER_NUMBER)) 
+    os.makedirs(target_dir, exist_ok=True)
+    vh_file_creator.create_vh_file_from_envvars(
+        target_dir, hdl_dir, toplevel="OpenEye_Parallel")
     results = cocotb_test.simulator.run(
         python_search=[tests_dir],
         verilog_sources=verilog_sources,
@@ -118,7 +123,7 @@ def test_mobilnet(LAYER_NUMBER):
         testcase='single_layer_test',
         force_compile=False,
         waves=True,
-        simulator="verilator",
+        **simulator_options(target_dir, hdl_dir, default="verilator"),
         extra_env = {"CLOCK_LEN" : str(clk_cycle)
                     ,"CLOCK_UNIT" : clk_cycle_unit
                     ,"CLOCK_DELAY_INPUT" : str(clk_delay_in)
@@ -128,8 +133,8 @@ def test_mobilnet(LAYER_NUMBER):
                     ,"LAYER" : layer_type
                     ,"NUM_FILTERS" : str(num_filters)
                     ,"STRIDE" : str(stride)
-                    ,"KERNEL_SIZE_X" : str(kernel_size_x)
-                    ,"KERNEL_SIZE_Y" : str(kernel_size_y)
+                    ,"KERNEL_SIZE_X" : str(kernel_size)
+                    ,"KERNEL_SIZE_Y" : str(kernel_size)
                     ,"INPUT_SIZE" : str(input_size)
                     ,"INPUT_CHANNELS" : str(input_channels)
                     }

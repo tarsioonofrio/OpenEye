@@ -170,14 +170,21 @@ class WghtStreamMapper(object):
                                 storage[cl_x][cl_y][router] = spad
             # Convert SPAD data to transmission bitstream
             wght_stream = self.create_complete_wght_stream(storage)
-        chunk = self.params.Clusters * self.params.NUM_GLB_WGHT
-        wght_stream = gtu.transform_n_to_m_chunked(wght_stream,self.params.WGHT_Trans_Bitwidth,self.params.DMA_BITWIDTH, chunk)
-        n = self.layer_params.wght_cycles_one_word_all_ram
-        temp = []
-        for i in range(0, len(wght_stream), n):
-            part = wght_stream[i : i + n]
-            temp.extend(part[::-1])
-        wght_stream = temp
+        if self.params.SERIAL:
+            # The serial/DMA interface consumes a flat stream of DMA words.
+            chunk = self.params.Clusters * self.params.NUM_GLB_WGHT
+            wght_stream = gtu.transform_n_to_m_chunked(
+                wght_stream, self.params.WGHT_Trans_Bitwidth,
+                self.params.DMA_BITWIDTH, chunk
+            )
+            n = self.layer_params.wght_cycles_one_word_all_ram
+            temp = []
+            for i in range(0, len(wght_stream), n):
+                part = wght_stream[i : i + n]
+                temp.extend(part[::-1])
+            wght_stream = temp
+        # Parallel-mode callers need the [cluster_x][cluster_y][router][word]
+        # shape returned by create_complete_wght_stream for write_wght().
         return wght_stream
     
     def set_sparse_stream(self, spad_data):

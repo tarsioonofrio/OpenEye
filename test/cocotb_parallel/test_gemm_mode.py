@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -29,8 +30,8 @@ DEFINES = [
 ]
 
 
-def _run(command, *, cwd):
-    result = subprocess.run(command, cwd=cwd, text=True, capture_output=True)
+def _run(command, *, cwd, env=None):
+    result = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True)
     output = result.stdout + result.stderr
     if result.returncode:
         pytest.fail(
@@ -52,7 +53,19 @@ def test_gemm_mode_plumbing_sv(tmp_path):
         path for path in HDL_DIR.rglob("*")
         if path.suffix in {".v", ".sv"} and path.name != "OpenEye_FPGA.v"
     )
-    include_dir = HDL_DIR / "include"
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(
+        filter(None, [str(REPO_ROOT / "src"), env.get("PYTHONPATH")])
+    )
+    setup = (
+        "from open_eye import vh_file_creator; "
+        f"vh_file_creator.create_vh_file_from_envvars({str(tmp_path)!r}, "
+        f"{str(HDL_DIR)!r}, toplevel='OpenEye_Parallel')"
+    )
+    _run([sys.executable, "-c", setup], cwd=tmp_path, env=env)
+    include_dir = tmp_path
+    xcelium_tmp = tmp_path / "xcelium_tmp"
+    xcelium_tmp.mkdir(exist_ok=True)
     define_args = [f"-D{define}" for define in DEFINES]
 
     if simulator == "icarus":
@@ -62,8 +75,8 @@ def test_gemm_mode_plumbing_sv(tmp_path):
             *define_args, f"-I{include_dir}", "-o", str(executable),
             *map(str, sources), str(TB_FILE),
         ]
-        _run(compile_command, cwd=tmp_path)
-        output = _run(["vvp", str(executable)], cwd=tmp_path)
+        _run(compile_command, cwd=tmp_path, env=env)
+        output = _run(["vvp", str(executable)], cwd=tmp_path, env=env)
     elif simulator == "verilator":
         obj_dir = tmp_path / "obj_dir"
         compile_command = [
@@ -71,14 +84,15 @@ def test_gemm_mode_plumbing_sv(tmp_path):
             "--top-module", TOPLEVEL, "--Mdir", str(obj_dir),
             *define_args, f"-I{include_dir}", *map(str, sources), str(TB_FILE),
         ]
-        _run(compile_command, cwd=tmp_path)
-        output = _run([str(obj_dir / f"V{TOPLEVEL}")], cwd=tmp_path)
+        _run(compile_command, cwd=tmp_path, env=env)
+        output = _run([str(obj_dir / f"V{TOPLEVEL}")], cwd=tmp_path, env=env)
     else:
         compile_command = [
-            "xrun", "-64", "-sv", "-access", "+rwc", "-top", TOPLEVEL,
+            "xrun", "-64", "-sv", "-access", "+rwc",
+            "-cds_alternate_tmpdir", str(xcelium_tmp), "-top", TOPLEVEL,
             *sum((["-define", define] for define in DEFINES), []),
             "-incdir", str(include_dir), *map(str, sources), str(TB_FILE),
         ]
-        output = _run(compile_command, cwd=tmp_path)
+        output = _run(compile_command, cwd=tmp_path, env=env)
 
     assert "PASS: OpenEye_Parallel GEMM mode plumbing" in output, output

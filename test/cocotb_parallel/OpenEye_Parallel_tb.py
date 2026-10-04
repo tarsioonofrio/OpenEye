@@ -150,13 +150,26 @@ async def single_layer_test(dut):
     #load_model_function
 
     
-    # Create the OpenEye parameters and the DRAM given the model
-    dram = DRAM.DRAMContents(model)
+    # LayerParameters is needed to size DRAM buffers and load each layer's
+    # weights. Build in reverse so each layer can inspect the parameters of
+    # the layer that follows it, matching the FPGA testbench's convention.
+    openeye_parameter = oep.get_oep(serial)
+    max_layers = len(model.layers)
+    layer_parameters = [0 for _ in range(max_layers)]
+    for layer_number, layer in reversed(list(enumerate(model.layers))):
+        layer_parameters[max_layers - layer_number - 1] = lp.LayerParameters(
+            layer_parameters, layer, openeye_parameter, layer_number, max_layers
+        )
+    layer_parameters.reverse()
+
+    # Create the OpenEye parameters and the DRAM given the model.
+    dram = DRAM.DRAMContents(model.layers, layer_parameters)
     time_printer.timestamp("Initialized DRAM. ", logger)
-    dram.write_initial_data_to_dram(model, sparse_iacts, sparse_wghts)
+    dram.write_initial_data_to_dram(
+        model.layers, layer_parameters, sparse_iacts, sparse_wghts
+    )
     time_printer.timestamp("DRAM Initialized. ", logger)
 
-    openeye_parameter = oep.get_oep(serial)
     time_printer.timestamp("OpenEye parameters set. ", logger)
 
     # Start the clock
@@ -168,32 +181,35 @@ async def single_layer_test(dut):
     time_printer.timestamp("All signals resetted. ", logger)
 
     # Process the layers of the model one after another
-    max_layers = len(model.layers)
     for layer_number, layer in enumerate(model.layers):
         if("Pooling" in str(layer)):
             slo.pool(dram, layer, layer_number)
         elif("Flat" in str(layer)):
             slo.flat(dram, layer, layer_number)
         else:
-            layer_parameters = lp.LayerParameters(layer, openeye_parameter, layer_number, max_layers)
+            layer_parameter = layer_parameters[layer_number]
             time_printer.timestamp("Layer parameters created. ", logger)
-            calculated_results = ptu.collect_results(layer, layer_number, layer_parameters, dram, openeye_parameter.SERIAL)
-            output_order = ptu.make_ref(openeye_parameter, layer_parameters, layer, layer_number, dram, calculated_results)
+            calculated_results = ptu.collect_results(
+                layer_number, layer_parameter, dram, openeye_parameter.SERIAL
+            )
+            output_order = ptu.make_ref(
+                openeye_parameter, layer_parameter, layer_number, dram, calculated_results
+            )
             if(logging.DEBUG >= log_level):
                 time_printer.timestamp("Reference data created. ", logger)
 
             dram_layer_content = [dram.fmap[layer_number], dram.weights[layer_number], dram.bias[layer_number]]
             time_printer.timestamp("Start creating stream. ", logger)
-            stream = ptu.write_stream(openeye_parameter, layer_parameters, layer, dram_layer_content, sparse_iacts, sparse_wghts)
+            stream = ptu.write_stream(
+                openeye_parameter, layer_parameter, dram_layer_content,
+                sparse_iacts, sparse_wghts
+            )
             
             time_printer.timestamp("Streams set. ", logger)
-            for layer_repetition in range(layer_parameters.needed_total_transmissions):
-                layer_thread = calculate_layer(ptp, dut, stream, openeye_parameter, layer_parameters, layer_repetition, model, layer_es, dram, log_level, layer_number, layer, output_order)
+            for layer_repetition in range(layer_parameter.needed_total_transmissions):
+                layer_thread = calculate_layer(ptp, dut, stream, openeye_parameter, layer_parameter, layer_repetition, model, layer_es, dram, log_level, layer_number, layer, output_order)
                 await layer_thread
-                if(logging.DEBUG >= log_level):
-                    assert gtu.check_results('demo/layer_' + str(layer_number) + '_' + str(layer_repetition) + '/dma_stream_ref.txt',\
-                                'demo/layer_' + str(layer_number) + '_' + str(layer_repetition) + '/output.txt')
-            assert ptu.compare_dram_with_ref(layer, calculated_results, dram.fmap[1 + layer_number])
+            assert ptu.compare_dram_with_ref(layer_parameter, calculated_results, dram.fmap[1 + layer_number])
         slo.batchnorm_output(layer, 512, layer_number, dram)
 
     assert dut.rst_ni.value == 1, "rst_ni is not 1!"
@@ -218,24 +234,33 @@ async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, la
     if(stream[layer_repetition][strdic.stream_parallel_dict["status"]][strdic.status_dict["skipPsum"]] != 1):
         await psum_thread
     logger.info("Stream is sent.")
-    cocotb.start_soon(rtl_test_utils.set_input(ptp,(dut.compute_i), 1))
-    await Timer(ptp.clk_cycle, units=ptp.clk_cycle_unit)
-    cocotb.start_soon(rtl_test_utils.set_input(ptp,(dut.compute_i), 0))
-    await Timer(ptp.clk_cycle, units=ptp.clk_cycle_unit)
-    await Timer(ptp.clk_cycle, units=ptp.clk_cycle_unit)
-    await Timer(ptp.clk_cycle, units=ptp.clk_cycle_unit)
-    await Timer(ptp.clk_cycle, units=ptp.clk_cycle_unit)
+    cocotb.start_soon(rtl_test_utils.set_input(ptp, dut.compute_i, 1))
+    await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+    cocotb.start_soon(rtl_test_utils.set_input(ptp, dut.compute_i, 0))
+    await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
     if (layer_repetition != (lp.needed_total_transmissions-1)) :
         wght_thread = cocotb.start_soon(rtl_test_utils.write_wght(ptp, dut, stream[layer_repetition + 1][strdic.stream_parallel_dict["wght"]], oep, lp))
         iact_thread = cocotb.start_soon(rtl_test_utils.write_iact(ptp, dut, stream[layer_repetition + 1][strdic.stream_parallel_dict["iact"]], oep, lp))
-    await cocotb.start_soon(rtl_test_utils.await_ready_signal(ptp, dut, layer_number, model, layer_repetition, lp, oep, layer_es, dram, log_level, stream[layer_repetition]))
-    
-    
-    #if (layer_repetition != (lp.needed_total_transmissions-1)) :
-    #    iact_thread = cocotb.start_soon(rtl_test_utils.write_iact(ptp, dut, stream[layer_repetition + 1][strdic.stream_parallel_dict["iact"]], oep, lp))
+
+    # The parallel top treats psum_ready_i as downstream backpressure for the
+    # output stream. Keep every PSUM sink ready while collecting this layer.
+    psum_ready_mask = (1 << (oep.Clusters_X * oep.Clusters_Y * oep.NUM_GLB_PSUM)) - 1
+    cocotb.start_soon(rtl_test_utils.set_input(ptp, dut.psum_ready_i, psum_ready_mask))
+    await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
     if("Depthwise" in str(layer)):
-        await cocotb.start_soon(rtl_test_utils.compare_stream_Dw(ptp, dut, layer_number, model, layer_repetition, lp, oep, layer_es, dram, log_level, stream[layer_repetition], output_order))
+        await rtl_test_utils.compare_stream_Dw(
+            ptp, dut, layer_number, model, layer_repetition, lp,
+            oep, layer_es, dram, log_level, output_order
+        )
     elif("Conv" in str(layer)):
-        await cocotb.start_soon(rtl_test_utils.compare_stream_Conv(ptp, dut, layer_number, model, layer_repetition, lp, oep, layer_es, dram, log_level, stream[layer_repetition], output_order))
+        await rtl_test_utils.compare_stream_Conv(
+            ptp, dut, layer_number, layer_repetition, lp,
+            oep, layer_es, dram, log_level, output_order
+        )
     elif("Dense" in str(layer)):
-        await cocotb.start_soon(rtl_test_utils.compare_stream_Dense(ptp, dut, layer_number, model, layer_repetition, lp, oep, layer_es, dram, log_level, stream[layer_repetition]))
+        await rtl_test_utils.compare_stream_Dense(
+            ptp, dut, layer_number, layer_repetition, lp,
+            oep, layer_es, dram, log_level
+        )
+    cocotb.start_soon(rtl_test_utils.set_input(ptp, dut.psum_ready_i, 0))
+    await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)

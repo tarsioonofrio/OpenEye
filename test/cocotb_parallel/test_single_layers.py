@@ -7,11 +7,11 @@ import os
 import sys
 import pytest
 import cocotb_test.simulator
-from datetime import datetime
 logger = logging.getLogger("cocotb")
 
 directory = (os.path.abspath(os.getcwd()))
 sys.path.extend([directory, os.path.dirname(os.path.realpath(__file__))])
+from sim_utils import simulator_options
 tests_dir = os.path.abspath(os.path.dirname(__file__))
 hdl_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), os.pardir, os.pardir, "hdl")
 
@@ -46,14 +46,13 @@ clk_delay_unit_out = "ps"
 @pytest.mark.parametrize("LOGGER_LEVEL", [(0)])
 
 def test_single_conv_layer(NUM_FILTERS, STRIDE, KERNEL_SIZE_X, KERNEL_SIZE_Y, INPUT_SIZE, INPUT_CHANNELS, \
-USE_SPARSE_IACTS, USE_SPARSE_WGHTS, USE_RANDOM_VALUES, LOGGER_LEVEL, CLUSTER_ROWS):
+USE_SPARSE_IACTS, USE_SPARSE_WGHTS, USE_RANDOM_VALUES, LOGGER_LEVEL, CLUSTER_ROWS, tmp_path):
     layer = "Convolution"
     dut = 'OpenEye_Parallel'
     module = 'OpenEye_Parallel_tb'
     toplevel = dut
     verilog_sources = ptu.get_verilog_sources(hdl_dir)
-    target_dir = os.path.join(tests_dir, '.temp')
-    os.makedirs(target_dir, exist_ok=True)
+    target_dir = os.fspath(tmp_path)
     vh_file_creator.create_vh_file_from_envvars(target_dir,hdl_dir + "/", toplevel = "OpenEye_Parallel")
     results = cocotb_test.simulator.run(
         python_search=[tests_dir],
@@ -61,11 +60,11 @@ USE_SPARSE_IACTS, USE_SPARSE_WGHTS, USE_RANDOM_VALUES, LOGGER_LEVEL, CLUSTER_ROW
         toplevel=toplevel,
         module=module,
         sim_build=target_dir,
-        includes=[os.path.join(hdl_dir, 'include')],
+        parameters={"CLUSTER_ROWS": CLUSTER_ROWS},
         testcase='single_layer_test',
         force_compile=True,
         waves=True,
-        simulator="verilator",
+        **simulator_options(target_dir, hdl_dir, default="verilator"),
         extra_env = {"CLOCK_LEN" : str(clk_cycle)
                     ,"CLOCK_UNIT" : clk_cycle_unit
                     ,"CLOCK_DELAY_INPUT" : str(clk_delay_in)
@@ -91,26 +90,26 @@ USE_SPARSE_IACTS, USE_SPARSE_WGHTS, USE_RANDOM_VALUES, LOGGER_LEVEL, CLUSTER_ROW
 @pytest.mark.parametrize("KERNEL_SIZE_Y", [(7)])
 @pytest.mark.parametrize("INPUT_SIZE", [(7)])
 @pytest.mark.parametrize("INPUT_CHANNELS", [(10)])#, 4, 8])
-def test_single_pool_layer(STRIDE,KERNEL_SIZE_X,KERNEL_SIZE_Y,INPUT_SIZE,INPUT_CHANNELS):
+def test_single_pool_layer(STRIDE,KERNEL_SIZE_X,KERNEL_SIZE_Y,INPUT_SIZE,INPUT_CHANNELS,tmp_path):
     layer = "Pooling"
     dut = 'OpenEye_Parallel'
     module = 'OpenEye_Parallel_tb'
     toplevel = dut
     verilog_sources = ptu.get_verilog_sources(hdl_dir)
-    current_time = str(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-    target_dir = os.path.join(tests_dir, '.temp_' + current_time) 
-    vh_file_creator.create_vh_file_from_envvars(file_path_vh = target_dir, file_path_hdl = os.getcwd() + "/../../../hdl/")
+    target_dir = os.fspath(tmp_path)
+    vh_file_creator.create_vh_file_from_envvars(
+        file_path_vh=target_dir, file_path_hdl=hdl_dir,
+        toplevel="OpenEye_Parallel")
     results = cocotb_test.simulator.run(
         python_search=[tests_dir],
         verilog_sources=verilog_sources,
         toplevel=toplevel,
         module=module,
         sim_build=target_dir,
-        includes=[os.path.join(hdl_dir, 'include')],
         testcase='single_layer_test',
         force_compile=True,
         #waves=True,
-        simulator="icarus",
+        **simulator_options(target_dir, hdl_dir, default="icarus"),
         extra_env = {"CLOCK_LEN" : str(clk_cycle)
                     ,"CLOCK_UNIT" : clk_cycle_unit
                     ,"CLOCK_DELAY_INPUT" : str(clk_delay_in)
@@ -130,7 +129,7 @@ def test_single_pool_layer(STRIDE,KERNEL_SIZE_X,KERNEL_SIZE_Y,INPUT_SIZE,INPUT_C
 @pytest.mark.parametrize("KERNEL_SIZE_Y", [(3)])
 @pytest.mark.parametrize("INPUT_SIZE", [(32)])
 @pytest.mark.parametrize("INPUT_CHANNELS", [(4),(8)])#, 4, 8])
-def test_depthwise_conv_layer(STRIDE,KERNEL_SIZE_X,KERNEL_SIZE_Y,INPUT_SIZE,INPUT_CHANNELS):
+def test_depthwise_conv_layer(STRIDE,KERNEL_SIZE_X,KERNEL_SIZE_Y,INPUT_SIZE,INPUT_CHANNELS,tmp_path):
     NUM_FILTERS = 1
     layer = "Depthwise_Convolution"
     dut = 'OpenEye_Parallel'
@@ -138,8 +137,7 @@ def test_depthwise_conv_layer(STRIDE,KERNEL_SIZE_X,KERNEL_SIZE_Y,INPUT_SIZE,INPU
     toplevel = dut
     verilog_sources = ptu.get_verilog_sources(hdl_dir)
 
-    target_dir = os.path.join(tests_dir, '.temp') 
-    os.makedirs(target_dir, exist_ok=True)
+    target_dir = os.fspath(tmp_path)
     # PE.v and PE_cluster.v `include their own parameter headers; generate
     # them into sim_build so Icarus finds them next to the other sources.
     vh_file_creator.create_vh_file_from_envvars(
@@ -151,11 +149,10 @@ def test_depthwise_conv_layer(STRIDE,KERNEL_SIZE_X,KERNEL_SIZE_Y,INPUT_SIZE,INPU
         toplevel=toplevel,
         module=module,
         sim_build=target_dir,
-        includes=[os.path.join(hdl_dir, 'include')],
         testcase='single_layer_test',
         force_compile=True,
         #waves=True,
-        simulator="icarus",
+        **simulator_options(target_dir, hdl_dir, default="icarus"),
         extra_env = {"CLOCK_LEN" : str(clk_cycle)
                     ,"CLOCK_UNIT" : clk_cycle_unit
                     ,"CLOCK_DELAY_INPUT" : str(clk_delay_in)
@@ -174,15 +171,14 @@ def test_depthwise_conv_layer(STRIDE,KERNEL_SIZE_X,KERNEL_SIZE_Y,INPUT_SIZE,INPU
 # TODO: parameters...
 @pytest.mark.parametrize("INPUT_SIZE", [(32)])
 @pytest.mark.parametrize("OUTPUT_SIZE", [(32)])
-def test_fc_layer(INPUT_SIZE, OUTPUT_SIZE):
+def test_fc_layer(INPUT_SIZE, OUTPUT_SIZE, tmp_path):
     layer = "FC"
     dut = 'OpenEye_Parallel'
     module = 'OpenEye_Parallel_tb'
     toplevel = dut
     verilog_sources = ptu.get_verilog_sources(hdl_dir)
 
-    target_dir = os.path.join(tests_dir, '.temp') 
-    os.makedirs(target_dir, exist_ok=True)
+    target_dir = os.fspath(tmp_path)
     # PE.v and PE_cluster.v `include their own parameter headers; generate
     # them into sim_build so Icarus finds them next to the other sources.
     vh_file_creator.create_vh_file_from_envvars(
@@ -194,11 +190,10 @@ def test_fc_layer(INPUT_SIZE, OUTPUT_SIZE):
         toplevel=toplevel,
         module=module,
         sim_build=target_dir,
-        includes=[os.path.join(hdl_dir, 'include')],
         testcase='single_layer_test',
         force_compile=True,
         #waves=True,
-        simulator="icarus",
+        **simulator_options(target_dir, hdl_dir, default="icarus"),
         extra_env = {"CLOCK_LEN" : str(clk_cycle)
                     ,"CLOCK_UNIT" : clk_cycle_unit
                     ,"CLOCK_DELAY_INPUT" : str(clk_delay_in)
