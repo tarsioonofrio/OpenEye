@@ -3220,6 +3220,41 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                   for pe_x in range(oep.PEs_X)]
                         logger.error("Dense core cluster(%d,%d) PE states=%s",
                                      cl_x, cl_y, states)
+                        if cl_x == 0 and cl_y == 0:
+                            pe = cluster.pe_cluster.gen_X[0].gen_Y[0].pe
+                            fields = []
+                            for name in ("iact_addr_max_reg", "channel_reg_C0",
+                                         "filters_reg_M0", "iact_addr_current",
+                                         "wght_data_vec", "wght_data_end"):
+                                try:
+                                    fields.append("%s=%s" %
+                                                  (name, str(getattr(pe, name).value)))
+                                except Exception:
+                                    pass
+                            logger.error("Dense core PE(0,0) config: %s",
+                                         " ".join(fields))
+                            for label, path in (("iact", "iact_data_SPad"),
+                                                ("weight", "weight_data_SPad")):
+                                try:
+                                    memory = getattr(pe, path).ram.impl.mem
+                                    words = [str(memory[i].value)
+                                             for i in range(min(8, len(memory)))]
+                                    logger.error("Dense core PE(0,0) %s SPAD=%s",
+                                                 label, words)
+                                except Exception as exc:
+                                    logger.error("Dense core PE(0,0) %s SPAD unreadable: %s",
+                                                 label, type(exc).__name__)
+                            for mac in range(oep.PARALLEL_MACS):
+                                try:
+                                    memory = (pe.gen_serial_psum_spad
+                                              .gen_psum_spad[mac].psum_SPad.ram.impl.mem)
+                                    words = [str(memory[i].value)
+                                             for i in range(min(8, len(memory)))]
+                                    logger.error("Dense core PE(0,0) PSUM SPAD mac=%d %s",
+                                                 mac, words)
+                                except Exception as exc:
+                                    logger.error("Dense core PE(0,0) PSUM SPAD mac=%d unreadable: %s",
+                                                 mac, type(exc).__name__)
                     except Exception as exc:
                         logger.error("Dense core cluster(%d,%d) state unreadable: %s",
                                      cl_x, cl_y, type(exc).__name__)
