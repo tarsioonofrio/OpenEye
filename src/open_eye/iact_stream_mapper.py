@@ -966,6 +966,33 @@ class DenseIactStreamMapper(IactStreamMapper):
                     overhead_counter = overhead_counter + 1
 
         return spad_storage
+
+    def create_pe_data_iact_stream(self, spad):
+        """Pack Dense SPAD ``[value, overhead]`` entries into input words."""
+        params = self.params
+        layer_params = self.layer_params
+        values_per_transfer = params.IACT_Trans_Bitwidth // params.IACT_WOH_Bitwidth
+        transfer_count = math.ceil(
+            layer_params.used_iact_per_PE / values_per_transfer
+        )
+        value_mask = (1 << params.IACT_Bitwidth) - 1
+        overhead_mask = (1 << (params.IACT_WOH_Bitwidth - params.IACT_Bitwidth)) - 1
+        stream = []
+        for transfer in range(transfer_count):
+            packed = 0
+            for lane in range(values_per_transfer):
+                index = transfer * values_per_transfer + lane
+                if index < len(spad):
+                    value = gtu.to_twos_complement(
+                        int(spad[index][0]), params.IACT_Bitwidth
+                    )
+                    overhead = int(spad[index][1]) & overhead_mask
+                    packed_value = (overhead << params.IACT_Bitwidth) | (value & value_mask)
+                    packed |= packed_value << (lane * params.IACT_WOH_Bitwidth)
+            stream.append(packed)
+        return stream
+
+
 class DwIactStreamMapper(IactStreamMapper):
     """Specialized mapper for depthwise convolution layer input activations.
 
