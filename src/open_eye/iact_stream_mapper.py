@@ -861,7 +861,7 @@ class DenseIactStreamMapper(IactStreamMapper):
             for cl_x in range(params.Clusters_X):
                 for cl_y in range(params.Clusters_Y):
                     for router in range(params.NUM_GLB_IACT):
-                        iact_stream[cl_x][cl_y][router] = write_iact_data_glb(cl_x, cl_y, router)
+                        iact_stream[cl_x][cl_y][router] = self.write_iact_data_glb(cl_x, cl_y, router)
             iact_stream = create_complete_iact_stream(iact_stream)
         else :
             iact_stream = []
@@ -966,7 +966,6 @@ class DenseIactStreamMapper(IactStreamMapper):
                     overhead_counter = overhead_counter + 1
 
         return spad_storage
-    
 class DwIactStreamMapper(IactStreamMapper):
     """Specialized mapper for depthwise convolution layer input activations.
 
@@ -1126,4 +1125,3 @@ class DwIactStreamMapper(IactStreamMapper):
                 overhead_counter = overhead_counter + 1
 
         return spad_storage
-    

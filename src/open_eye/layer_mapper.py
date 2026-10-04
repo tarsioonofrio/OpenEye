@@ -60,6 +60,7 @@ Subclasses:
 """
 
 import logging
+import math
 import open_eye.stream_dicts as strdic
 
 logger = logging.getLogger("cocotb")
@@ -229,6 +230,44 @@ class LayerMapper(object):
                 includes status, iact, wght, psum, quantize, and offset channels.
         """
         return self.storage
+
+    def write_quant_and_offset(self, params, layer_params, layer_repetition):
+        """Pack per-filter quantization and offset values into DMA words.
+
+        This common implementation is inherited by layer mappers that do not
+        need a specialized quantization layout (including depthwise layers).
+        The stream is sliced from the most-significant end first because the
+        RTL shift register moves earlier words toward higher bit positions.
+        """
+        offset_width = getattr(params, "OFFSET_WIDTH", 8)
+        exponent_width = getattr(params, "EXPONENT_WIDTH", 7)
+        mantissa_width = getattr(params, "MANTISSA_WIDTH", 25)
+        entry_width = offset_width + exponent_width + mantissa_width
+        dma_width = params.DMA_BITWIDTH
+        total_bits = params.QUANT_AMOUNT * entry_width
+
+        packed_stream = 0
+        for index in range(params.QUANT_AMOUNT):
+            mantissa, exponent = layer_params.quantize[index]
+            offset = layer_params.offset[index]
+            entry = (
+                (offset & ((1 << offset_width) - 1))
+                | ((exponent & ((1 << exponent_width) - 1)) << offset_width)
+                | ((mantissa & ((1 << mantissa_width) - 1))
+                   << (offset_width + exponent_width))
+            )
+            packed_stream |= entry << (index * entry_width)
+
+        word_count = math.ceil(total_bits / dma_width)
+        padded_bits = word_count * dma_width
+        word_mask = (1 << dma_width) - 1
+        dma_words = []
+        for index in range(word_count):
+            shift = padded_bits - (index + 1) * dma_width
+            word = (packed_stream >> shift) & word_mask if shift >= 0 else \
+                (packed_stream << -shift) & word_mask
+            dma_words.append(word)
+        return dma_words
 
     def write_working_parameters(self, params, layer_params, layer_repetition):
         """Generate layer-specific working parameters and hardware configuration.
