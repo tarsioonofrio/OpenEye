@@ -862,7 +862,7 @@ class DenseIactStreamMapper(IactStreamMapper):
                 for cl_y in range(params.Clusters_Y):
                     for router in range(params.NUM_GLB_IACT):
                         iact_stream[cl_x][cl_y][router] = self.write_iact_data_glb(cl_x, cl_y, router)
-            iact_stream = create_complete_iact_stream(iact_stream)
+            iact_stream = self.create_complete_iact_stream(iact_stream)
         else :
             iact_stream = []
             if (layer_params.skipIact == 0) :
