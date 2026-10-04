@@ -1,64 +1,84 @@
 # This file is part of the OpenEye project.
-# © Fachhochschule Dortmund – University of Applied Sciences and Arts (until 2025), Universität Duisburg-Essen (since 2025).
+# © Fachhochschule Dortmund – University of Applied Sciences and Arts (until 2025),
+# Universität Duisburg-Essen (since 2025).
 # SPDX-License-Identifier: SHL-2.1
-# For more details, see the LICENSE file in the root directory of this project.
 
-"""
-Pytest runner for the output-stationary (GEMM) dataflow plumbing test on
-OpenEye_Parallel. See OpenEye_Parallel_gemm_tb.py for the checks performed.
+"""Compile and run the native SystemVerilog OpenEye_Parallel GEMM testbench.
 
-Usage:
-    pytest test_gemm_mode.py -v
+Select a simulator with ``OPENEYE_SIMULATOR=icarus|verilator|xcelium``.
 """
 
 import os
-import sys
+from pathlib import Path
+import shutil
+import subprocess
 
 import pytest
-import cocotb_test.simulator
-
-tests_dir = os.path.abspath(os.path.dirname(__file__))
-sys.path.extend([os.path.abspath(os.getcwd()), tests_dir])
-hdl_dir = os.path.abspath(os.path.join(tests_dir, os.pardir, os.pardir, "hdl"))
-
-import open_eye.test_utils_main as ptu
-
-clk_cycle = 10
-clk_cycle_unit = "ns"
 
 
-@pytest.mark.parametrize("CLUSTER_ROWS", [2])
-def test_gemm_mode_plumbing(CLUSTER_ROWS, request):
-    nodeid = request.node.nodeid.replace("::", "_").replace("/", "_") \
-                                .replace("[", "_").replace("]", "_")
-    target_dir = os.path.join(tests_dir, ".temp", nodeid)
-    os.makedirs(target_dir, exist_ok=True)
+TEST_DIR = Path(__file__).resolve().parent
+REPO_ROOT = TEST_DIR.parents[1]
+HDL_DIR = REPO_ROOT / "hdl"
+TB_FILE = TEST_DIR / "OpenEye_Parallel_gemm_tb.sv"
+TOPLEVEL = "OpenEye_Parallel_gemm_tb"
 
-    # OpenEye_FPGA.v needs a generated parameters.vh; it is not part of the
-    # OpenEye_Parallel hierarchy, so exclude it from the compile.
-    verilog_sources = [
-        src for src in ptu.get_verilog_sources(hdl_dir)
-        if os.path.basename(src) != "OpenEye_FPGA.v"
-    ]
+DEFINES = [
+    "NO_TRACE",
+    "USE_INTERNAL_PARAMS_PE",
+    "USE_INTERNAL_PARAMS_PE_cluster",
+]
 
-    cocotb_test.simulator.run(
-        python_search=[tests_dir],
-        verilog_sources=verilog_sources,
-        toplevel="OpenEye_Parallel",
-        module="OpenEye_Parallel_gemm_tb",
-        sim_build=target_dir,
-        includes=[os.path.join(hdl_dir, "include")],
-        parameters={"CLUSTER_ROWS": CLUSTER_ROWS},
-        # This runner overrides the PE parameters through `parameters` and does
-        # not generate the parameter headers, so use the modules' built-in
-        # defaults instead of the generated parameters_PE*.vh includes.
-        defines={"NO_TRACE": "TRUE",
-                 "USE_INTERNAL_PARAMS_PE": "TRUE",
-                 "USE_INTERNAL_PARAMS_PE_cluster": "TRUE"},
-        force_compile=True,
-        simulator="icarus",
-        extra_env={
-            "CLOCK_LEN": str(clk_cycle),
-            "CLOCK_UNIT": clk_cycle_unit,
-        },
+
+def _run(command, *, cwd):
+    result = subprocess.run(command, cwd=cwd, text=True, capture_output=True)
+    output = result.stdout + result.stderr
+    if result.returncode:
+        pytest.fail(
+            f"Command failed ({result.returncode}): {' '.join(map(str, command))}\n{output}"
+        )
+    return output
+
+
+def test_gemm_mode_plumbing_sv(tmp_path):
+    simulator = os.environ.get("OPENEYE_SIMULATOR", "icarus").lower()
+    if simulator not in {"icarus", "verilator", "xcelium"}:
+        pytest.fail(f"Unsupported OPENEYE_SIMULATOR={simulator!r}")
+
+    compiler = {"icarus": "iverilog", "verilator": "verilator", "xcelium": "xrun"}[simulator]
+    if not shutil.which(compiler):
+        pytest.skip(f"{compiler} is not installed or not available on PATH")
+
+    sources = sorted(
+        path for path in HDL_DIR.rglob("*")
+        if path.suffix in {".v", ".sv"} and path.name != "OpenEye_FPGA.v"
     )
+    include_dir = HDL_DIR / "include"
+    define_args = [f"-D{define}" for define in DEFINES]
+
+    if simulator == "icarus":
+        executable = tmp_path / "gemm_mode.vvp"
+        compile_command = [
+            "iverilog", "-g2012", "-s", TOPLEVEL,
+            *define_args, f"-I{include_dir}", "-o", str(executable),
+            *map(str, sources), str(TB_FILE),
+        ]
+        _run(compile_command, cwd=tmp_path)
+        output = _run(["vvp", str(executable)], cwd=tmp_path)
+    elif simulator == "verilator":
+        obj_dir = tmp_path / "obj_dir"
+        compile_command = [
+            "verilator", "--binary", "--timing", "-Wno-fatal",
+            "--top-module", TOPLEVEL, "--Mdir", str(obj_dir),
+            *define_args, f"-I{include_dir}", *map(str, sources), str(TB_FILE),
+        ]
+        _run(compile_command, cwd=tmp_path)
+        output = _run([str(obj_dir / f"V{TOPLEVEL}")], cwd=tmp_path)
+    else:
+        compile_command = [
+            "xrun", "-64", "-sv", "-access", "+rwc", "-top", TOPLEVEL,
+            *sum((["-define", define] for define in DEFINES), []),
+            "-incdir", str(include_dir), *map(str, sources), str(TB_FILE),
+        ]
+        output = _run(compile_command, cwd=tmp_path)
+
+    assert "PASS: OpenEye_Parallel GEMM mode plumbing" in output, output
