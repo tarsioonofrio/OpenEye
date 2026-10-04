@@ -3175,6 +3175,71 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
         storage_file = open(filename, 'w')
 
 
+    if not hasattr(dut, "enable_dma_o"):
+        # test_single_layers instantiates OpenEye_Parallel directly, so collect
+        # its packed PSUM lanes. The DMA readout path below is for FPGA tops.
+        cocotb.start_soon(send_enable_dense(
+            ptp, dut, layer_parameters, layer_repetition, oep
+        ))
+        await _wait_for_signal(
+            ptp, dut.psum_enable_o, name="psum_enable_o",
+            context=" before dense core output", dut=dut,
+        )
+        columns = oep.Clusters_X
+        rows = oep.Clusters_Y
+        per_column = math.ceil(layer_parameters.used_psum_per_PE)
+        tile = ((layer_repetition // layer_parameters.iact_transmissions_pe)
+                % layer_parameters.psum_transmissions_pe)
+        tile_offset = tile * columns * rows * per_column
+        output_count = 0
+        cycles = math.ceil(per_column / oep.PARALLEL_MACS)
+        for psum_pe in range(cycles):
+            enable_value = int(dut.psum_enable_o.value)
+            for cl_y in range(rows):
+                for cl_x in range(columns):
+                    for router in reversed(range(oep.NUM_GLB_PSUM)):
+                        if not layer_parameters.computing_mx[
+                            cl_x][cl_y][0][oep.NUM_GLB_PSUM - router - 1]:
+                            continue
+                        lane = ((cl_y * columns + cl_x) * oep.NUM_GLB_PSUM
+                                + router)
+                        if not (enable_value & (1 << lane)):
+                            continue
+                        lower = lane * oep.PSUM_Trans_Bitwidth
+                        data = int(dut.psum_data_o.value)
+                        for mac in range(oep.PARALLEL_MACS):
+                            index = (mac + oep.PARALLEL_MACS * psum_pe
+                                     + cl_x * per_column
+                                     + cl_y * per_column * columns
+                                     + tile_offset)
+                            shift = lower + oep.DATA_PSUM_BITWIDTH * (
+                                oep.PARALLEL_MACS - 1 - mac
+                            )
+                            value = _signed(
+                                (data >> shift) & ((1 << oep.DATA_PSUM_BITWIDTH) - 1),
+                                oep.DATA_PSUM_BITWIDTH,
+                            )
+                            if index < len(dram.fmap[layer_number + 1]):
+                                expected = int(dram.fmap[layer_number + 1][index])
+                                assert value == expected, (
+                                    f"Dense core output {index}: got {value}, "
+                                    f"expected {expected} (cluster=({cl_x},{cl_y}) "
+                                    f"router={router}, cycle={psum_pe}, mac={mac})"
+                                )
+                                output_count += 1
+                            else:
+                                assert value == 0, (
+                                    f"Dense core padding output {index} is {value}"
+                                )
+            await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+        assert output_count == len(dram.fmap[layer_number + 1]), (
+            f"Dense core emitted {output_count} outputs, expected "
+            f"{len(dram.fmap[layer_number + 1])}"
+        )
+        cocotb.start_soon(set_input(ptp, dut.psum_enable_i, 0))
+        await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+        return
+
     # FC reduces cluster rows into row 0 and emits one signed accumulator
     # per DMA beat. Columns are interleaved within each buffer address.
     columns = oep.Clusters_X
