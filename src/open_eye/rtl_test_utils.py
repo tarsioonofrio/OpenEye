@@ -1587,37 +1587,51 @@ def _dense_active_router_mask(layer_parameters, cl_x, cl_y, oep):
     )
 
 
-async def _wait_for_dense_pes_ready(ptp, dut, layer_parameters, oep):
-    """Wait until every active dense PE is ready to stream its PSUMs."""
-    # This FC workload reached SEND_PSUM within about 55 cycles in the prior
-    # trace. Let it advance once, then take one bounded state snapshot.
-    max_cycles = min(_max_wait_cycles(), 50)
-    await Timer(max_cycles * ptp.clk_cycle, unit=ptp.clk_cycle_unit)
-    states = []
-    all_ready = True
+async def _wait_for_active_pes_ready(ptp, dut, layer_parameters, oep, layer_name):
+    """Wait until all PEs that compute this layer can stream their PSUMs."""
+    max_cycles = _max_wait_cycles()
+    active_pes = []
     for cl_y in range(oep.Clusters_Y):
         for cl_x in range(oep.Clusters_X):
             mask = _dense_active_router_mask(layer_parameters, cl_x, cl_y, oep)
             cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
             for pe_x in range(oep.NUM_GLB_PSUM):
-                if not (mask & (1 << pe_x)):
-                    continue
-                pe = cluster.pe_cluster.gen_X[pe_x].gen_Y[0].pe
-                try:
-                    state_value = int(pe.current_state_computing.value)
-                    state = str(state_value)
-                except Exception:
-                    state = "?"
-                    state_value = None
-                states.append(f"({cl_x},{cl_y},pe{pe_x})={state}")
-                all_ready &= state_value == 7
-    if all_ready:
-        return
+                if mask & (1 << pe_x):
+                    active_pes.append((cl_x, cl_y, pe_x,
+                                       cluster.pe_cluster.gen_X[pe_x].gen_Y[0].pe))
+
+    if not active_pes:
+        raise RuntimeError(f"No active PEs found for {layer_name} output")
+
+    last_states = []
+    for cycle in range(max_cycles):
+        states = []
+        all_ready = True
+        for cl_x, cl_y, pe_x, pe in active_pes:
+            try:
+                state_value = int(pe.current_state_computing.value)
+                state = str(state_value)
+            except Exception:
+                state = "?"
+                state_value = None
+            states.append(f"({cl_x},{cl_y},pe{pe_x})={state}")
+            all_ready &= state_value == 7  # WAIT_TO_SEND_PSUM in PE.v
+        if all_ready:
+            return
+        last_states = states
+        if cycle + 1 < max_cycles:
+            await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+
     raise TimeoutError(
-        "Active dense PEs did not reach WAIT_TO_SEND_PSUM within "
-        f"{max_cycles} cycles; states: {' '.join(states)}"
+        f"Active {layer_name} PEs did not reach WAIT_TO_SEND_PSUM within "
+        f"{max_cycles} cycles; states: {' '.join(last_states)}"
         f"{_fsm_state_note(dut)}"
     )
+
+
+async def _wait_for_dense_pes_ready(ptp, dut, layer_parameters, oep):
+    """Wait until every active dense PE is ready to stream its PSUMs."""
+    await _wait_for_active_pes_ready(ptp, dut, layer_parameters, oep, "dense")
 
 
 async def _wait_for_dense_cluster_output(ptp, dut, layer_parameters, oep):
@@ -3766,6 +3780,11 @@ async def send_enable_conv(ptp, dut, layer_params, layer_repetition, oep):
         - Handles proper synchronization of enable signals
         - Manages timing for multiple processing cycles
     """
+    # Requesting output while a PE is still IDLE or calculating can make its
+    # FSM enter SEND_PSUM before the new partial sum is written.
+    await _wait_for_active_pes_ready(
+        ptp, dut, layer_params, oep, "convolution"
+    )
     cocotb.start_soon(set_input(ptp,(dut.psum_enable_i), (2**(oep.Clusters_X*oep.Clusters_Y*oep.NUM_GLB_PSUM))-1))
 
 
@@ -3809,7 +3828,11 @@ async def send_enable_dw(ptp, dut, layer_params, layer_repetition, oep):
         Depthwise convolution timing differs from standard convolution as
         each channel is processed independently with its own filter.
     """
-    # Enable all partial sum global buffers (one per cluster router)
+    # Enable all partial sum global buffers (one per cluster router) only
+    # after every computing PE has finished writing its current PSUMs.
+    await _wait_for_active_pes_ready(
+        ptp, dut, layer_params, oep, "depthwise convolution"
+    )
     cocotb.start_soon(set_input(ptp,(dut.psum_enable_i), (2**(oep.Clusters_X*oep.Clusters_Y*oep.NUM_GLB_PSUM))-1))
 
     # Calculate wait cycles: refreshes needed divided by clusters, divided by 2 (dual outputs)
