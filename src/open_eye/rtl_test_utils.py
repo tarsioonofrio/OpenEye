@@ -1626,8 +1626,17 @@ async def _wait_for_active_pes_ready(ptp, dut, layer_parameters, oep, layer_name
             cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
             for pe_x in range(oep.NUM_GLB_PSUM):
                 if mask & (1 << pe_x):
-                    active_pes.append((cl_x, cl_y, pe_x,
-                                       cluster.pe_cluster.gen_X[pe_x].gen_Y[0].pe))
+                    pe = cluster.pe_cluster.gen_X[pe_x].gen_Y[0].pe
+                    # The static layer mask can include cluster rows that the
+                    # stream mapper did not populate for this transmission.
+                    # Only wait on PEs that actually received their operands;
+                    # the later golden comparison still checks the full layer.
+                    try:
+                        if int(pe.data_set.value) != 1:
+                            continue
+                    except (AttributeError, ValueError, TypeError):
+                        pass
+                    active_pes.append((cl_x, cl_y, pe_x, pe))
 
     if not active_pes:
         raise RuntimeError(f"No active PEs found for {layer_name} output")
