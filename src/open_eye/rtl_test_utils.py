@@ -2326,6 +2326,21 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                         val(pe.psum_ready_i))
             last_state = state
             lines += 1
+        if state == 6:
+            logger.info(
+                "pw t=%s MAC iact_addr=%s wght_addr=%s iact=%s weight0=%s "
+                "weight1=%s fac1=%s fac2=%s mult0=%s mult1=%s "
+                "psum_r_en=%s psum_w_en=%s psum_r_addr=%s psum_w_addr=%s "
+                "psum_d0=%s psum_d1=%s",
+                now, val(pe.iact_data_SPad_addr), val(pe.wght_data_SPad_addr),
+                raw(pe.iact_data_spad_pay), raw(pe.wght_data_spad_pay[0]),
+                raw(pe.wght_data_spad_pay[1]), raw(pe.mult_fac_1[0]),
+                raw(pe.mult_fac_2[0]), raw(pe.mult_o_w[0]), raw(pe.mult_o_w[1]),
+                raw(pe.psum_data_SPad_en_r[0]), raw(pe.psum_data_SPad_en_w[0]),
+                val(pe.psum_spad_addr_r[0]), val(pe.psum_spad_addr_w[0]),
+                raw(pe.psum_spad_data_i[0]), raw(pe.psum_spad_data_i[1]),
+            )
+            lines += 1
         if state == 7:
             psum_signature = (
                 raw(dut.psum_enable_i), raw(dut.psum_enable_i_reg),
