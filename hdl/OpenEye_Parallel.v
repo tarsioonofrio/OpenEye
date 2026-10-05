@@ -906,7 +906,9 @@ module OpenEye_Parallel #(
               )+pec_gen*$clog2(
                   NUM_GLB_IACT+1
               )+: $clog2(NUM_GLB_IACT + 1)];
-            assign gen_x[cc_gen].gen_y[cr_gen].compute_cluster_i_w[pec_gen*PE_ROWS+per_gen] = compute_cluster_i_reg[cc_gen*CLUSTER_ROWS*PES+cr_gen*PES+pec_gen*PE_ROWS+per_gen];
+            // PE_cluster indexes its PE vector as x + y*PE_COLUMNS, matching
+            // the row-major register layout used by iact_choose_cluster_i_w.
+            assign gen_x[cc_gen].gen_y[cr_gen].compute_cluster_i_w[per_gen*PE_COLUMNS+pec_gen] = compute_cluster_i_reg[cc_gen*CLUSTER_ROWS*PES+cr_gen*PES+per_gen*PE_COLUMNS+pec_gen];
           end
         end
 
