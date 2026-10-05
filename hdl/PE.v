@@ -1698,6 +1698,7 @@ module PE #(
 
     reg  [          IACT_ADDR_DATA   : 0] iact_channel;     // Current iact address being processed
     reg  [          IACT_ADDR_DATA   : 0] wght_filter;     // Current iact address being processed
+    reg  [          IACT_ADDR_DATA   : 0] iact_words_to_compute;
     reg                                   computing_1;              // Flag indicating active computation
     reg                                   computing_2;              // Flag indicating active computation
     always @(posedge clk_i, negedge rst_ni) begin
@@ -1732,6 +1733,7 @@ module PE #(
         end
         iact_channel       <= 0;
         wght_filter        <= 0;
+        iact_words_to_compute <= 0;
         mux_iact_ready     <= 1;
         wght_ready_o       <= 1;
         psum_select        <= 1;
@@ -1805,6 +1807,9 @@ module PE #(
             // Start computation when both iact and wght data are loaded
             if (data_set & compute_pe & ((second_spad_words_iact != 0) & (second_spad_words_wght != 0))) begin
               current_state_computing <= LOADING_1;
+              // compute_pe also clears the input pipeline's word counter on
+              // this edge, so retain the local activation count for the FSM.
+              iact_words_to_compute  <= second_spad_words_iact;
               mux_iact_ready          <= 0;
               wght_ready_o            <= 0;
               psum_select             <= 0;
@@ -1901,7 +1906,13 @@ module PE #(
               wght_filter          <= 0;
               iact_channel         <= iact_channel + 1;
               iact_data_SPad_addr  <= iact_data_SPad_addr + 1;
-              if (((channel_reg_C0 * iact_addr_max_reg) - 1 == iact_channel)) begin
+              // Dense activation streams are partitioned across PE/GLB
+              // lanes, so channel_reg_C0 is the layer-wide channel count and
+              // can exceed the local activation SPad slice held by this PE.
+              // The dense SPad word counter is the authoritative local K
+              // length; continuing to the layer-wide count reads unwritten
+              // entries as X and leaves the PSUM accumulator unknown.
+              if ((iact_channel == (iact_words_to_compute - 1'b1))) begin
                 iact_channel            <= 0;
                 current_state_computing <= WAIT_TO_SEND_PSUM;
                 wght_ready_o            <= 1;
