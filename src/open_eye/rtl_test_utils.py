@@ -3359,9 +3359,41 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                         if not (enable_value & (1 << lane)):
                             continue
                         lower = lane * oep.PSUM_Trans_Bitwidth
-                        lane_data = int(dut.psum_data_o.value[
+                        raw_lane_data = dut.psum_data_o.value[
                             lower + oep.PSUM_Trans_Bitwidth - 1:lower
-                        ])
+                        ]
+                        try:
+                            lane_data = int(raw_lane_data)
+                        except ValueError as exc:
+                            pe_states = []
+                            try:
+                                cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+                                for pe_x in range(oep.PEs_X):
+                                    for pe_y in range(oep.PEs_Y):
+                                        pe = cluster.pe_cluster.gen_X[pe_x].gen_Y[pe_y].pe
+                                        pe_states.append(
+                                            "(%d,%d):state=%s,psum=%s,adder=%s,computing=%s"
+                                            % (pe_x, pe_y,
+                                               str(pe.current_state_computing.value),
+                                               str(pe.psum_data_o.value),
+                                               str(pe.adder_o_w[0].value),
+                                               str(pe.computing.value))
+                                        )
+                            except Exception as diag_exc:
+                                pe_states.append("unavailable:%s" % type(diag_exc).__name__)
+                            logger.error(
+                                "Dense core output has X: cluster=(%d,%d) router=%d "
+                                "lane=%d cycle=%d raw=%s enable=%s PE states=%s",
+                                cl_x, cl_y, router, lane, psum_pe,
+                                str(raw_lane_data), str(dut.psum_enable_o.value),
+                                "; ".join(pe_states),
+                            )
+                            raise AssertionError(
+                                "Dense core output contains X at cluster "
+                                "(%d,%d), router %d, lane %d, cycle %d: %s"
+                                % (cl_x, cl_y, router, lane, psum_pe,
+                                   str(raw_lane_data))
+                            ) from exc
                         for mac in range(oep.PARALLEL_MACS):
                             index = (mac + oep.PARALLEL_MACS * psum_pe
                                      + cl_x * per_column
