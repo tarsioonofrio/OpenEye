@@ -3587,6 +3587,15 @@ async def send_enable_dense(ptp, dut, layer_params, layer_repetition, oep):
     # Enable all partial sum global buffers across all clusters
     cocotb.start_soon(set_input(ptp,(dut.psum_enable_i), (2**(oep.Clusters_X*oep.Clusters_Y*oep.NUM_GLB_PSUM))-1))
 
+    # The PE accepts the output request only after it reaches
+    # WAIT_TO_SEND_PSUM. Keep the request asserted through computation and
+    # release it after the output stream has begun, rather than pulsing it
+    # immediately after compute_i where every PE can ignore it.
+    await _wait_for_signal(
+        ptp, dut.psum_enable_o, name="psum_enable_o",
+        context=" while requesting dense output", dut=dut,
+    )
+
     # Wait cycles based on partial sums per PE (divided by 2 for dual outputs)
     for _ in range(math.ceil(layer_params.used_psum_per_PE/2)):
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
