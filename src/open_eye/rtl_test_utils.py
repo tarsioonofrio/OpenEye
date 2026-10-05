@@ -2273,6 +2273,7 @@ async def trace_pe_wght_writes(ptp, dut, oep):
         logger.info("pw: weight addr SPad not reachable (%s)", type(exc).__name__)
     lines = 0
     last_state = None
+    last_psum = None
     while lines < 4000:
         await FallingEdge(dut.clk_i)
         now = cocotb.utils.get_sim_time("ns")
@@ -2290,6 +2291,18 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                         val(pe.psum_ready_i))
             last_state = state
             lines += 1
+        if state == 7:
+            psum_signature = (
+                raw(dut.psum_enable_i), raw(dut.psum_enable_i_reg),
+                raw(dut.gen_x[cx].gen_y[cy].router_mode_psum_i_w),
+                raw(pe.psum_enable_i), raw(pe.psum_ready_o),
+            )
+            if psum_signature != last_psum:
+                logger.info("pw t=%s WAIT_PSUM top_en=%s reg_en=%s mode=%s "
+                            "pe_en=%s pe_ready=%s",
+                            now, *psum_signature)
+                last_psum = psum_signature
+                lines += 1
         if wa is not None and val(wa.we_i) == 1:
             logger.info("pw t=%s WA addr=%s data=%s", now, val(wa.addr_i), val(wa.data_i))
             lines += 1
