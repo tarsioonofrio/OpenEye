@@ -1694,7 +1694,7 @@ def _signal_note(handle, names):
 
 def _active_pe_gate_note(active_pes, limit=8):
     """Summarize PE start/data gates when an output wait times out."""
-    names = ("compute_i", "compute_pe", "data_set", "iact_select_i",
+    names = ("current_state_computing", "compute_i", "compute_pe", "data_set", "iact_select_i",
              "iact_enable_i",
              "second_spad_words_iact", "second_spad_words_wght",
              "iact_ready_o", "wght_ready_o")
