@@ -233,7 +233,7 @@ async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, la
         # This direct-core test bypasses that constructor, so reproduce its
         # first-window bank assignment: PE (x, y) reads the bank at x*stride+y,
         # or the disabled sentinel when that bank is outside the GLB array.
-        selector_bits = (oep.NUM_GLB_IACT + 1).bit_length()
+        selector_bits = oep.NUM_GLB_IACT.bit_length()
         iact_choose = 0
         for cluster_x in range(oep.Clusters_X):
             for cluster_y in range(oep.Clusters_Y):
