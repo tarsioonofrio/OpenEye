@@ -3397,7 +3397,7 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                     "densebus cycle=%d enable=%s lanes=%s route_mode=%s "
                     "pe_route_en=%s pe_routes=%s",
                     psum_pe, str(dut.psum_enable_o.value), lanes,
-                    str(cluster.router_mode_psum_i_w.value),
+                    str(cluster.router_mode_psum_i.value),
                     str(cluster.pe_router_psum_enable_out.value), pe_routes,
                 )
             for cl_y in range(rows):
@@ -3441,7 +3441,7 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                 str(pe.adder_o_w[0].value),
                                 str(pe.adder_o_w[1].value),
                                 str(pe.psum_data_o.value),
-                                str(cluster.router_mode_psum_i_w.value),
+                                str(cluster.router_mode_psum_i.value),
                                 str(cluster.pe_router_psum_enable_out.value),
                                 str(pe_router_data),
                             )
