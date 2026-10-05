@@ -286,7 +286,8 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
         # inter-cluster PE chain. Selecting the router on every row leaves
         # middle-mode PEs waiting for a PSUM enable that those modes never send.
         if hasattr(dut, "psum_choose_i"):
-            if "FC" in str(lp.layer_name).upper():
+            if any(name in str(lp.layer_name).upper()
+                   for name in ("FC", "DENSE")):
                 psum_router_mask = 0
                 for cl_x in range(oep.Clusters_X):
                     for router in range(oep.NUM_GLB_PSUM):
