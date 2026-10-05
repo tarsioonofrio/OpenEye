@@ -3113,7 +3113,7 @@ async def trace_pe_calc_loop(ptp, dut, oep, cl_x=0, cl_y=0, pe_row=0, pe_col=0,
     except Exception as exc:
         logger.error("trace_pe_calc_loop: PE unreachable (%s)", type(exc).__name__)
         return
-    pe_names = ("current_state_computing", "wght_data_vec",
+    pe_names = ("current_state_computing", "filters_reg_M0", "wght_data_vec",
                 "wght_data_SPad_addr", "values_valid", "computing",
                 "iact_addr_SPad_data_r", "second_spad_words_iact",
                 "second_spad_words_wght", "mux_iact_ready")
@@ -3147,6 +3147,7 @@ async def trace_pe_calc_loop(ptp, dut, oep, cl_x=0, cl_y=0, pe_row=0, pe_col=0,
     try:
         handler = pe.wght_data_handler
         pipeline_names = (
+            "first_spad_max_i",
             "filters_w", "overhead_reg", "overhead_new_calc_reg", "overhead_w",
             "overhead_next_word", "next_channel_counter", "data_storage_1",
             "temp_acc_overhead", "first_spad_addr_o", "first_spad_addr_delay",
