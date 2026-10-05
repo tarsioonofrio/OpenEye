@@ -896,14 +896,14 @@ module PE #(
                                           (psum_spad_addr_w[pmc] != psum_spad_addr_r[pmc]) ?  1 : 0;
       if ((SERIAL == 0) && (PARALLEL_MACS == 2)) begin : gen_parallel_psum_read_hazard
         // The parallel PSUM SPAD uses one true dual-port RAM for both MACs.
-        // When the other lane writes the address being read, use the PE's
-        // forwarding path instead of asking the RAM for undefined read-during-
-        // write data. Keep the write enabled so the newest PSUM is committed.
+        // When the other lane writes the address being read, let the PE's
+        // forwarding path provide the value instead of asking the RAM for
+        // undefined read-during-write data. Keep the write enabled so the
+        // newest PSUM is committed.
         assign psum_data_SPad_en_r_i[pmc] =
             (psum_data_SPad_en_r[pmc] || psum_enable_i) &&
             !((psum_data_SPad_en_w_i[1-pmc]) &&
-              (psum_spad_addr_r[pmc] == psum_spad_addr_w[1-pmc]) &&
-              (reuse_psum_spad[pmc] || reuse_adder_data[pmc][1-pmc]));
+              (psum_spad_addr_r[pmc] == psum_spad_addr_w[1-pmc]));
       end else begin : gen_default_psum_read_enable
         assign psum_data_SPad_en_r_i[pmc] = psum_data_SPad_en_r[pmc] || psum_enable_i;
       end
