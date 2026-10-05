@@ -179,6 +179,10 @@ async def single_layer_test(dut):
     # reset the DUT
     await cocotb.start_soon(rtl_test_utils.reset_all_signals(ptp, dut, openeye_parameter.SERIAL))
     time_printer.timestamp("All signals resetted. ", logger)
+    if os.environ.get("OPENEYE_TRACE_PE_WRITES", "0").lower() in {"1", "true", "yes", "on"}:
+        cocotb.start_soon(rtl_test_utils.trace_pe_wght_writes(
+            ptp, dut, openeye_parameter
+        ))
 
     # Process the layers of the model one after another
     for layer_number, layer in enumerate(model.layers):
