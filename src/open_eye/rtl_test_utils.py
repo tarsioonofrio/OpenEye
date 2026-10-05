@@ -1625,8 +1625,29 @@ async def _wait_for_active_pes_ready(ptp, dut, layer_parameters, oep, layer_name
     raise TimeoutError(
         f"Active {layer_name} PEs did not reach WAIT_TO_SEND_PSUM within "
         f"{max_cycles} cycles; states: {' '.join(last_states)}"
-        f"{_fsm_state_note(dut)}"
+        f"; top: {_fsm_state_note(dut)}"
+        f"; PE gates: {_active_pe_gate_note(active_pes)}"
     )
+
+
+def _active_pe_gate_note(active_pes, limit=8):
+    """Summarize PE start/data gates when an output wait times out."""
+    names = ("compute_i", "compute_pe", "data_set",
+             "second_spad_words_iact", "second_spad_words_wght",
+             "iact_ready_o", "wght_ready_o")
+    details = []
+    for cl_x, cl_y, pe_x, pe in active_pes[:limit]:
+        values = []
+        for name in names:
+            try:
+                value = int(getattr(pe, name).value)
+            except Exception:
+                value = "?"
+            values.append(f"{name}={value}")
+        details.append(f"({cl_x},{cl_y},pe{pe_x})[{' '.join(values)}]")
+    if len(active_pes) > limit:
+        details.append(f"... +{len(active_pes) - limit} PEs")
+    return " ".join(details)
 
 
 async def _wait_for_dense_pes_ready(ptp, dut, layer_parameters, oep):
