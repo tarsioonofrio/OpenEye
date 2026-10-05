@@ -1077,8 +1077,11 @@ class DwIactStreamMapper(IactStreamMapper):
                 value = gtu.to_twos_complement_string(
                     spad[number_of_value][0], params.IACT_Bitwidth
                 )
+                overhead_value = int(spad[number_of_value][1])
+                if not self.sparse_data:
+                    overhead_value %= layer_params.kernel_size[0]
                 overhead = gtu.to_twos_complement_string(
-                    spad[number_of_value][1], overhead_width
+                    overhead_value, overhead_width
                 )
                 packed_value = int(overhead + value, 2)
                 temp_trans |= packed_value << (
