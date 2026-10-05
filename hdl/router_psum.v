@@ -152,10 +152,6 @@ module router_psum #(
   wire r21;
   wire r22;
 
-  // Modes 1 and 6 are the first and middle stages of a vertical PSUM
-  // reduction: PE -> bottom, then top -> PE -> bottom. Mode 3 is the final
-  // stage: top -> PE -> GLB. The paired ready paths keep each hop backpressured.
-
   ///Destination Port: Data
   ////////////////////////////////////////
 
@@ -235,7 +231,7 @@ module router_psum #(
                (router_mode_i[2:0] == 3'd3) ? 0 :
                (router_mode_i[2:0] == 3'd4) ? 0 :
                (router_mode_i[2:0] == 3'd5) ? 0 :
-               (router_mode_i[2:0] == 3'd6) ? enable_src_port_1 :
+               (router_mode_i[2:0] == 3'd6) ? 0 :
                (router_mode_i[2:0] == 3'd7) ? 0 : 0;
 
   assign e20 = (router_mode_i[2:0] == 3'd0) ? 0 :
@@ -244,7 +240,7 @@ module router_psum #(
                (router_mode_i[2:0] == 3'd3) ? 0 :
                (router_mode_i[2:0] == 3'd4) ? 0 :
                (router_mode_i[2:0] == 3'd5) ? 0 :
-               (router_mode_i[2:0] == 3'd6) ? 0 :
+               (router_mode_i[2:0] == 3'd6) ? enable_src_port_2 :
                (router_mode_i[2:0] == 3'd7) ? enable_src_port_2 : 0;
   assign e21 = (router_mode_i[2:0] == 3'd0) ? 0 :
                (router_mode_i[2:0] == 3'd1) ? 0 :
@@ -252,7 +248,7 @@ module router_psum #(
                (router_mode_i[2:0] == 3'd3) ? enable_src_port_2 :
                (router_mode_i[2:0] == 3'd4) ? 0 :
                (router_mode_i[2:0] == 3'd5) ? 0 :
-               (router_mode_i[2:0] == 3'd6) ? enable_src_port_2 :
+               (router_mode_i[2:0] == 3'd6) ? 0 :
                (router_mode_i[2:0] == 3'd7) ? 0 : 0;
   assign e22 = (router_mode_i[2:0] == 3'd0) ? 0 :
                (router_mode_i[2:0] == 3'd1) ? 0 :
@@ -272,7 +268,7 @@ module router_psum #(
                (router_mode_i[2:0] == 3'd3) ? ready_dst_port_0 :
                (router_mode_i[2:0] == 3'd4) ? ready_dst_port_0 :
                (router_mode_i[2:0] == 3'd5) ? ready_dst_port_0 :
-               (router_mode_i[2:0] == 3'd6) ? 1 :
+               (router_mode_i[2:0] == 3'd6) ? 0 :
                (router_mode_i[2:0] == 3'd7) ? 0 : 0;
   assign r20 = (router_mode_i[2:0] == 3'd0) ? 0 :
                (router_mode_i[2:0] == 3'd1) ? 0 :
@@ -280,7 +276,7 @@ module router_psum #(
                (router_mode_i[2:0] == 3'd3) ? 1 :
                (router_mode_i[2:0] == 3'd4) ? 0 :
                (router_mode_i[2:0] == 3'd5) ? 0 :
-               (router_mode_i[2:0] == 3'd6) ? 1 :
+               (router_mode_i[2:0] == 3'd6) ? ready_dst_port_0 :
                (router_mode_i[2:0] == 3'd7) ? ready_dst_port_0 : 0;
 
   assign r01 = (router_mode_i[2:0] == 3'd0) ? ready_dst_port_1 :
@@ -297,7 +293,7 @@ module router_psum #(
                (router_mode_i[2:0] == 3'd3) ? ready_dst_port_1 :
                (router_mode_i[2:0] == 3'd4) ? 0 :
                (router_mode_i[2:0] == 3'd5) ? 0 :
-               (router_mode_i[2:0] == 3'd6) ? ready_dst_port_1 :
+               (router_mode_i[2:0] == 3'd6) ? 1 :
                (router_mode_i[2:0] == 3'd7) ? 1 : 0;
 
   assign r02 = (router_mode_i[2:0] == 3'd0) ? 1 :
@@ -314,7 +310,7 @@ module router_psum #(
                (router_mode_i[2:0] == 3'd3) ? 1 :
                (router_mode_i[2:0] == 3'd4) ? 1 :
                (router_mode_i[2:0] == 3'd5) ? 1 :
-               (router_mode_i[2:0] == 3'd6) ? ready_dst_port_2 :
+               (router_mode_i[2:0] == 3'd6) ? 0 :
                (router_mode_i[2:0] == 3'd7) ? 0 : 0;
   assign r22 = (router_mode_i[2:0] == 3'd0) ? 0 :
                (router_mode_i[2:0] == 3'd1) ? 0 :

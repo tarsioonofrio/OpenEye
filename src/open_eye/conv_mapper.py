@@ -496,10 +496,11 @@ class ConvMapper(LayerMapper):
         the cluster array. The routing depends on PE utilization and cluster Y organization.
 
         Routing values:
-        - 1: First cluster sends its local partial sum to the next row
-        - 6: Middle cluster adds its local partial sum and forwards the result
-        - 3: Final cluster adds the incoming partial sum and sends output to GLB
+        - 0: No routing (inactive cluster)
+        - 2: Pass-through cluster (middle of Y-cluster group)
+        - 3: Final accumulation cluster (last in Y-cluster group)
         - 4: Output cluster (single PE per cluster mode)
+        - 5: First accumulation cluster (first in Y-cluster group)
 
         Args:
             params: Hardware configuration parameters including cluster dimensions
@@ -538,9 +539,9 @@ class ConvMapper(LayerMapper):
                                 y_package_count = y_package_count + 1
                             if (y_package_count <= layer_params.Y_Cluster_Packages):
                                 if(params.SERIAL):
-                                    line = line + (1 << (params.Psum_Router_Bits * router_cycle))
+                                    line = line + (5 << (params.Psum_Router_Bits * router_cycle))
                                 else:
-                                    storage[cl_x][cl_y][router] = 1
+                                    storage[cl_x][cl_y][router] = 5
                         else:
                             if(((cl_y + 1) %  layer_params.used_Y_cluster) == 0):
                                 if (y_package_count <= layer_params.Y_Cluster_Packages):
@@ -551,9 +552,9 @@ class ConvMapper(LayerMapper):
                             else:
                                 if (y_package_count <= layer_params.Y_Cluster_Packages):
                                     if(params.SERIAL):
-                                        line = line + (6 << (params.Psum_Router_Bits * router_cycle))
+                                        line = line + (2 << (params.Psum_Router_Bits * router_cycle))
                                     else:
-                                        storage[cl_x][cl_y][router] = 6
+                                        storage[cl_x][cl_y][router] = 2
                     router_cycle = router_cycle + 1
                     if(params.SERIAL and (router_cycle == math.floor(params.DMA_BITWIDTH/params.Psum_Router_Bits))):
                         router_cycle = 0

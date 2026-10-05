@@ -517,10 +517,10 @@ class DenseMapper(LayerMapper):
         and cluster Y organization, determining how partial sums are accumulated.
 
         Routing values:
-        - 6: Middle cluster adds its local partial sum and forwards the result
-        - 3: Final cluster adds the incoming partial sum and sends output to GLB
+        - 2: Pass-through cluster (middle of Y-cluster group)
+        - 3: Final accumulation cluster (last in Y-cluster group)
         - 4: Output cluster (single PE per cluster mode)
-        - 1: First cluster sends its local partial sum to the next row
+        - 5: First accumulation cluster (first in Y-cluster group)
 
         Args:
             params: Hardware configuration parameters including cluster dimensions
@@ -560,9 +560,9 @@ class DenseMapper(LayerMapper):
                         if((cl_y % layer_params.used_Y_cluster) == 0):
                             # First cluster in Y-group: start of accumulation chain
                             if(params.SERIAL):
-                                line = line + (1 << (params.Psum_Router_Bits * router_cycle))
+                                line = line + (5 << (params.Psum_Router_Bits * router_cycle))
                             else:
-                                storage[cl_x][cl_y][router] = 1
+                                storage[cl_x][cl_y][router] = 5
                         else:
                             if(((cl_y + 1) %  layer_params.used_Y_cluster) == 0):
                                 # Last cluster in Y-group: final accumulation and output
@@ -573,9 +573,9 @@ class DenseMapper(LayerMapper):
                             else:
                                 # Middle cluster in Y-group: pass-through accumulation
                                 if(params.SERIAL):
-                                    line = line + (6 << (params.Psum_Router_Bits * router_cycle))
+                                    line = line + (2 << (params.Psum_Router_Bits * router_cycle))
                                 else:
-                                    storage[cl_x][cl_y][router] = 6
+                                    storage[cl_x][cl_y][router] = 2
 
                     router_cycle = router_cycle + 1
 
