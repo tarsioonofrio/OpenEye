@@ -24,7 +24,6 @@ module OpenEye_FPGA_gemm_workload_tb;
   integer output_filter;
   integer signed actual_value;
   integer signed expected_value;
-  integer debug_addr;
 
   always #10 clk_i = ~clk_i;
 
@@ -114,13 +113,10 @@ module OpenEye_FPGA_gemm_workload_tb;
                  dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.psum_ready_i,
                  dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.psum_select,
                  dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.current_state_computing);
-        $display("selected PE counters: iact_max=%0d channel=%0d iact_addr=%0d wght_vec=%0d wght_start=%0d wght_end=%0d wght_spad_addr=%0d values_valid=%b computing=%b",
+        $display("selected PE counters: iact_max=%0d channel=%0d wght_vec=%0d wght_data_addr=%0d values_valid=%b computing=%b",
                  dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.iact_addr_max_reg,
                  dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.channel_reg_C0,
-                 dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.gen_sparse_fsm.iact_addr_current,
                  dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.wght_data_vec,
-                 dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.gen_sparse_fsm.wght_data_start,
-                 dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.gen_sparse_fsm.wght_data_end,
                  dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.wght_data_SPad_addr,
                  dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.values_valid,
                  dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.computing);
@@ -131,10 +127,6 @@ module OpenEye_FPGA_gemm_workload_tb;
                  dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.second_spad_words_wght,
                  dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.wght_addr_SPad_addr,
                  dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.wght_addr_SPad_data_r);
-        for (debug_addr = 0; debug_addr < 16; debug_addr = debug_addr + 1)
-          $display("selected PE wght_addr_spad[%0d]=%h",
-                   debug_addr,
-                   dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.gen_wght_addr_spad.weight_addr_SPad.ram.impl.mem[debug_addr]);
         $fatal(1, "GEMM row %0d output count %0d, expected %0d",
                row_index, output_index, `GEMM_OUTPUT_COUNT);
       end
