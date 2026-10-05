@@ -1590,9 +1590,10 @@ def _dense_active_router_mask(layer_parameters, cl_x, cl_y, oep):
 async def _wait_for_dense_pes_ready(ptp, dut, layer_parameters, oep):
     """Wait until every active dense PE is ready to stream its PSUMs."""
     # This small direct-core FC workload should finish in far fewer cycles;
-    # avoid millions of expensive VHPI hierarchy reads if one PE is stuck.
+    # avoid expensive VHPI hierarchy reads on every cycle if one PE is stuck.
     max_cycles = min(_max_wait_cycles(), 10000)
-    for _ in range(max_cycles):
+    poll_interval = 50
+    for _ in range(0, max_cycles, poll_interval):
         all_ready = True
         for cl_y in range(oep.Clusters_Y):
             for cl_x in range(oep.Clusters_X):
@@ -1615,7 +1616,7 @@ async def _wait_for_dense_pes_ready(ptp, dut, layer_parameters, oep):
                         all_ready = False
         if all_ready:
             return
-        await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+        await Timer(poll_interval * ptp.clk_cycle, unit=ptp.clk_cycle_unit)
     states = []
     for cl_y in range(oep.Clusters_Y):
         for cl_x in range(oep.Clusters_X):
