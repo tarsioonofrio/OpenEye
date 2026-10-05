@@ -198,7 +198,7 @@ def test_fc_layer(INPUT_SIZE, OUTPUT_SIZE, tmp_path):
         module=module,
         sim_build=target_dir,
         parameters={
-            "SERIAL": 0,
+            "SERIAL": 1,
             "PE_SERIAL": 0,
             "IACT_DATA_WORDS": 1024,
             "SPARSITY_EN": 0,

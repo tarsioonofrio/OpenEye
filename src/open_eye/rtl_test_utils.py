@@ -4303,13 +4303,6 @@ async def send_enable_dense(ptp, dut, layer_params, layer_repetition, oep):
     # In PE.v, psum_enable_i sends an IDLE PE straight to SEND_PSUM. Wait for
     # the active PEs to finish their MAC loops before requesting the output.
     await _wait_for_dense_pes_ready(ptp, dut, layer_params, oep)
-    if not hasattr(dut, "enable_dma_o"):
-        # In the direct OpenEye_Parallel configuration, the main FSM selects
-        # PSUM GLB read/write mode. A compute pulse opens the read path while
-        # the host requests the completed vertical reduction.
-        cocotb.start_soon(set_input(ptp, dut.compute_i, 1))
-        await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
-        cocotb.start_soon(set_input(ptp, dut.compute_i, 0))
     cocotb.start_soon(set_input(
         ptp, dut.psum_enable_i,
         (1 << (oep.Clusters_X * oep.Clusters_Y * oep.NUM_GLB_PSUM)) - 1,
