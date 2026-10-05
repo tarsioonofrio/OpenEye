@@ -1694,8 +1694,10 @@ def _signal_note(handle, names):
 
 def _active_pe_gate_note(active_pes, limit=8):
     """Summarize PE start/data gates when an output wait times out."""
-    names = ("current_state_computing", "compute_i", "compute_pe", "data_set", "iact_select_i",
-             "iact_enable_i",
+    names = ("current_state_computing", "compute_i", "compute_pe", "data_set",
+             "iact_select_i", "iact_enable_i", "iact_channels_per_pe_i",
+             "channel_reg_C0", "first_spad_words_iact_S",
+             "first_spad_iact_en_w", "second_spad_iact_en_w",
              "second_spad_words_iact", "second_spad_words_wght",
              "iact_ready_o", "wght_ready_o")
     details = []
@@ -1727,7 +1729,9 @@ def trace_active_pe_input_counts(dut, layer_parameters, oep):
                         pe,
                         ("current_state_computing", "data_set",
                          "second_spad_words_iact", "second_spad_words_wght",
-                         "first_spad_words_iact_S", "compute_i"),
+                         "first_spad_words_iact_S", "channel_reg_C0",
+                         "iact_channels_per_pe_i", "first_spad_iact_en_w",
+                         "second_spad_iact_en_w", "compute_i"),
                     )
                     logger.info("PE input counters before compute (%d,%d,pe%d): %s",
                                 cl_x, cl_y, pe_x, values)
