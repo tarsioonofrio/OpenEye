@@ -1591,7 +1591,7 @@ async def _wait_for_dense_pes_ready(ptp, dut, layer_parameters, oep):
     """Wait until every active dense PE is ready to stream its PSUMs."""
     # This FC workload reached SEND_PSUM within about 55 cycles in the prior
     # trace. Let it advance once, then take one bounded state snapshot.
-    max_cycles = min(_max_wait_cycles(), 500)
+    max_cycles = min(_max_wait_cycles(), 50)
     await Timer(max_cycles * ptp.clk_cycle, unit=ptp.clk_cycle_unit)
     states = []
     all_ready = True
