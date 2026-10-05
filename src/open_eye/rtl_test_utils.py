@@ -2302,9 +2302,15 @@ async def trace_pe_wght_writes(ptp, dut, oep):
             return
         state = val(pe.current_state_computing)
         if state != last_state:
-            logger.info("pw t=%s PE state=%s compute_i=%s iact_words=%s "
-                        "wght_words=%s psum_enable=%s psum_ready=%s",
+            logger.info("pw t=%s PE state=%s compute_i=%s pending=%s "
+                        "iact_set=%s wght_set=%s data_set=%s iact_max=%s "
+                        "channels=%s filters=%s iact_words=%s wght_words=%s "
+                        "psum_enable=%s psum_ready=%s",
                         now, state, val(pe.compute_i),
+                        val(pe.compute_pending), val(pe.iact_set),
+                        val(pe.wght_set), val(pe.data_set),
+                        val(pe.iact_addr_max_reg), val(pe.channel_reg_C0),
+                        val(pe.filters_reg_M0),
                         val(pe.second_spad_words_iact),
                         val(pe.second_spad_words_wght), val(pe.psum_enable_o),
                         val(pe.psum_ready_i))
