@@ -3383,7 +3383,7 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                 for cl_x in range(columns):
                     for router in reversed(range(oep.NUM_GLB_PSUM)):
                         if not layer_parameters.computing_mx[
-                            cl_x][cl_y][0][oep.NUM_GLB_PSUM - router - 1]:
+                            cl_x][cl_y][0][router]:
                             continue
                         lane = ((cl_y * columns + cl_x) * oep.NUM_GLB_PSUM
                                 + router)
@@ -3396,7 +3396,7 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                         if os.environ.get("TRACE_DENSE_OUTPUT", "0").lower() in {
                             "1", "true", "yes", "on"
                         }:
-                            pe_x = oep.NUM_GLB_PSUM - router - 1
+                            pe_x = router
                             pe = (dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
                                   .pe_cluster.gen_X[pe_x].gen_Y[0].pe)
                             logger.info(
@@ -3432,11 +3432,9 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                                str(pe.adder_o_w[0].value),
                                                str(pe.computing.value))
                                         )
-                                        # Dense FC maps PE x=0 to the last
-                                        # PSUM router; computing_mx is indexed
-                                        # in PE order while the bus is reversed.
-                                        if (pe_x == (oep.NUM_GLB_PSUM - router - 1)
-                                                and pe_y == 0):
+                                        # PE column i connects directly to PSUM
+                                        # router i in PE_cluster/OpenEye_Cluster.
+                                        if pe_x == router and pe_y == 0:
                                             names = (
                                                 "values_valid", "raw_wght_w",
                                                 "second_spad_words_iact",
