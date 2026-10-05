@@ -23,6 +23,11 @@ def simulator_options(sim_build, hdl_dir, default):
         # traces opt-in; they can grow to gigabytes on full feature maps.
         "defines": [] if dump_waves else ["NO_TRACE"],
     }
+    if simulator == "verilator":
+        # The legacy RTL has known width/unused warnings; keep them visible
+        # without turning them into a compile stop (the native SV runners do
+        # the same with -Wno-fatal).
+        options["compile_args"] = ["-Wno-fatal"]
     if simulator == "xcelium":
         xcelium_tmp = os.path.join(os.fspath(sim_build), "xcelium_tmp")
         os.makedirs(xcelium_tmp, exist_ok=True)
