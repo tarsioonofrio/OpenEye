@@ -428,7 +428,7 @@ module data_pipeline_iact #(
         // -----------------------------------------------------------------
         if ((((cycle_counter == 0) & (data_i[SECOND_PAYLOAD_WIDTH-1:0] != 0)) |
             ((cycle_counter != 0) & (current_data != 0))) | (!SPARSITY_EN)) begin
-          second_spad_words_o <= second_spad_words_o + 1;
+          second_spad_words_o <= compute_sent ? 1 : second_spad_words_o + 1;
           first_spad_data_o   <= overhead_reg + 1'd1;
           overhead_reg        <= overhead_reg + 1;
           second_spad_en_o    <= 1;
@@ -479,7 +479,7 @@ module data_pipeline_iact #(
         // purposes (uneven_ending is only set when such a byte exists).
         // -----------------------------------------------------------------
         if (uneven_ending) begin
-          second_spad_words_o <= second_spad_words_o + 1;
+          second_spad_words_o <= compute_sent ? 1 : second_spad_words_o + 1;
           payload_reg         <= data_i[SECOND_SPAD_DATA + SECOND_PAYLOAD_WIDTH-1 : SECOND_SPAD_DATA];
           second_spad_en_o    <= 1;
           address_temp_2      <= address_temp_2 + 1;
@@ -538,7 +538,9 @@ module data_pipeline_iact #(
         transmission_counter       <= 0;
         transmission_counter_delay <= 0;
         second_spad_addr_o         <= 0;
-        second_spad_words_o        <= 0;
+        // Preserve the loaded-word count through this compute pulse. The PE
+        // FSM samples it on the same edge to decide whether computation can
+        // start; compute_sent clears it on the next input burst instead.
         compute_sent               <= 1;  // flag: clear second_spad_words_o next enable cycle
         cycle_counter              <= 0;
 
