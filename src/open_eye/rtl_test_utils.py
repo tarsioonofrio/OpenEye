@@ -2272,6 +2272,7 @@ async def trace_pe_wght_writes(ptp, dut, oep):
         wa = None
         logger.info("pw: weight addr SPad not reachable (%s)", type(exc).__name__)
     lines = 0
+    last_state = None
     while lines < 4000:
         await FallingEdge(dut.clk_i)
         now = cocotb.utils.get_sim_time("ns")
@@ -2279,6 +2280,16 @@ async def trace_pe_wght_writes(ptp, dut, oep):
             continue
         if now > t1:
             return
+        state = val(pe.current_state_computing)
+        if state != last_state:
+            logger.info("pw t=%s PE state=%s compute_i=%s iact_words=%s "
+                        "wght_words=%s psum_enable=%s psum_ready=%s",
+                        now, state, val(pe.compute_i),
+                        val(pe.second_spad_words_iact),
+                        val(pe.second_spad_words_wght), val(pe.psum_enable_o),
+                        val(pe.psum_ready_i))
+            last_state = state
+            lines += 1
         if wa is not None and val(wa.we_i) == 1:
             logger.info("pw t=%s WA addr=%s data=%s", now, val(wa.addr_i), val(wa.data_i))
             lines += 1
