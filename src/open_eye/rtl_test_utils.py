@@ -3113,33 +3113,33 @@ async def trace_pe_calc_loop(ptp, dut, oep, cl_x=0, cl_y=0, pe_row=0, pe_col=0,
     except Exception as exc:
         logger.error("trace_pe_calc_loop: PE unreachable (%s)", type(exc).__name__)
         return
-    names = ("current_state_computing", "iact_addr_current", "iact_addr_count",
-             "wght_data_vec", "wght_data_end", "wght_data_start",
-             "wght_data_SPad_addr", "values_valid", "computing",
-             "next_iact", "wght_start_set", "wght_end_set",
-             "mux_iact_ready")
-    pe_names = ("iact_addr_SPad_data_r", "second_spad_words_iact",
-                "second_spad_words_wght")
-    all_names = names + pe_names
+    pe_names = ("current_state_computing", "wght_data_vec",
+                "wght_data_SPad_addr", "values_valid", "computing",
+                "iact_addr_SPad_data_r", "second_spad_words_iact",
+                "second_spad_words_wght", "mux_iact_ready")
+    fsm_names = ("iact_addr_current", "iact_addr_count", "wght_data_end",
+                 "wght_data_start", "next_iact", "wght_start_set",
+                 "wght_end_set")
+    all_names = pe_names + fsm_names
     lines = 0
     prev = None
     for _ in range(max_lines):
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
         vals = []
-        for n in names:
-            try:
-                vals.append(int(getattr(fsm, n).value))
-            except Exception:
-                vals.append(-1)
         for n in pe_names:
             try:
                 vals.append(int(getattr(pe, n).value))
             except Exception:
                 vals.append(-1)
+        for n in fsm_names:
+            try:
+                vals.append(int(getattr(fsm, n).value))
+            except Exception:
+                vals.append(-1)
         if vals == prev:
             continue
         prev = vals
-        if vals[0] == 0 and vals[8] == 0:
+        if vals[0] == 0 and vals[4] == 0:
             continue
         logger.error("calc %s", " ".join("%s=%d" % (n, v)
                                          for n, v in zip(all_names, vals)))
