@@ -212,7 +212,7 @@ module router_psum #(
   assign e10 = (router_mode_i[2:0] == 3'd0) ? enable_src_port_1 :
                (router_mode_i[2:0] == 3'd1) ? 0 :
                (router_mode_i[2:0] == 3'd2) ? 0 :
-               (router_mode_i[2:0] == 3'd3) ? enable_src_port_1 :
+               (router_mode_i[2:0] == 3'd3) ? 0 :
                (router_mode_i[2:0] == 3'd4) ? enable_src_port_1 :
                (router_mode_i[2:0] == 3'd5) ? enable_src_port_1 :
                (router_mode_i[2:0] == 3'd6) ? 0 :
@@ -265,7 +265,7 @@ module router_psum #(
   assign r10 = (router_mode_i[2:0] == 3'd0) ? ready_dst_port_0 :
                (router_mode_i[2:0] == 3'd1) ? 1 :
                (router_mode_i[2:0] == 3'd2) ? 0 :
-               (router_mode_i[2:0] == 3'd3) ? ready_dst_port_0 :
+               (router_mode_i[2:0] == 3'd3) ? 0 :
                (router_mode_i[2:0] == 3'd4) ? ready_dst_port_0 :
                (router_mode_i[2:0] == 3'd5) ? ready_dst_port_0 :
                (router_mode_i[2:0] == 3'd6) ? 0 :
@@ -273,7 +273,7 @@ module router_psum #(
   assign r20 = (router_mode_i[2:0] == 3'd0) ? 0 :
                (router_mode_i[2:0] == 3'd1) ? 0 :
                (router_mode_i[2:0] == 3'd2) ? 1 :
-               (router_mode_i[2:0] == 3'd3) ? 1 :
+               (router_mode_i[2:0] == 3'd3) ? 0 :
                (router_mode_i[2:0] == 3'd4) ? 0 :
                (router_mode_i[2:0] == 3'd5) ? 0 :
                (router_mode_i[2:0] == 3'd6) ? ready_dst_port_0 :
