@@ -1399,7 +1399,14 @@ module PE #(
             // Detect when weight range is completely fetched, trigger next activation
             // Rationale: When we've fetched all weight range data, prepare to advance
             // to the next activation in the input sequence
-            if ((wght_data_end <= wght_data_SPad_addr + 1) && !next_iact) begin
+            // Address-map sentinels are rounded to a fixed number of words per
+            // activation. The final region can therefore end one word beyond
+            // the number of entries actually loaded into the weight SPAD.
+            // Treat the last valid SPAD entry as the end of that region too;
+            // otherwise the sparse FSM waits forever for an address it cannot
+            // read (for example end=48 with 47 loaded words, indices 0..46).
+            if (((wght_data_end <= wght_data_SPad_addr + 1) ||
+                 (wght_data_vec >= second_spad_words_wght - 1)) && !next_iact) begin
               wght_data_start <= wght_data_start_pre;  // Commit start address
               wght_end_set    <= 0;                     // Clear flags for next activation
               wght_start_set  <= 0;
