@@ -1923,13 +1923,13 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                 for a in range(layer_parameters.used_Y_cluster):
                     for b in range(0,oep.Clusters_Y,layer_parameters.used_Y_cluster):
                         cluster_order.append(a+b)
-                for y_cluster in reversed(cluster_order):
-                    for x_cluster in reversed(range(oep.Clusters_X)):
-                        for router in reversed(range(oep.NUM_GLB_PSUM)):
-                            if(layer_parameters.computing_mx[oep.Clusters_X-x_cluster-1][oep.Clusters_Y-y_cluster-1][0][oep.NUM_GLB_PSUM-router-1]== 1):
-                                actual_x = oep.Clusters_X - x_cluster - 1
-                                actual_y = oep.Clusters_Y - y_cluster - 1
-                                output_lane = ((actual_y * oep.Clusters_X + actual_x) * oep.NUM_GLB_PSUM + router)
+                for y_cluster in cluster_order:
+                    for x_cluster in range(oep.Clusters_X):
+                        for router in range(oep.NUM_GLB_PSUM):
+                            if layer_parameters.computing_mx[x_cluster][y_cluster][0][router] == 1:
+                                actual_x = x_cluster
+                                actual_y = y_cluster
+                                output_lane = ((y_cluster * oep.Clusters_X + x_cluster) * oep.NUM_GLB_PSUM + router)
                                 if dut.psum_enable_o.value[output_lane] != 1:
                                     continue
                                 lower_limit = output_lane * oep.PSUM_Trans_Bitwidth
