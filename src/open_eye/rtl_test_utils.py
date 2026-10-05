@@ -1596,6 +1596,39 @@ def _dense_active_router_mask(layer_parameters, cl_x, cl_y, oep):
     )
 
 
+async def _wait_for_dense_pes_ready(ptp, dut, layer_parameters, oep):
+    """Wait until every active dense PE is ready to stream its PSUMs."""
+    max_cycles = _max_wait_cycles()
+    for _ in range(max_cycles):
+        all_ready = True
+        for cl_y in range(oep.Clusters_Y):
+            for cl_x in range(oep.Clusters_X):
+                mask = _dense_active_router_mask(
+                    layer_parameters, cl_x, cl_y, oep
+                )
+                cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+                for pe_x in range(oep.NUM_GLB_PSUM):
+                    if not (mask & (1 << pe_x)):
+                        continue
+                    pe = cluster.pe_cluster.gen_X[pe_x].gen_Y[0].pe
+                    try:
+                        state = int(pe.current_state_computing.value)
+                    except (TypeError, ValueError):
+                        all_ready = False
+                        continue
+                    # PE.v localparam WAIT_TO_SEND_PSUM = 7. Asserting the
+                    # router request while the PE is IDLE sends stale zeros.
+                    if state != 7:
+                        all_ready = False
+        if all_ready:
+            return
+        await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+    raise TimeoutError(
+        "Active dense PEs did not reach WAIT_TO_SEND_PSUM within "
+        f"{max_cycles} cycles{_fsm_state_note(dut)}"
+    )
+
+
 async def _wait_for_dense_cluster_output(ptp, dut, layer_parameters, oep):
     """Wait for an active cluster PSUM lane, after the configured delay."""
     max_cycles = _max_wait_cycles()
@@ -3829,13 +3862,13 @@ async def send_enable_dense(ptp, dut, layer_params, layer_repetition, oep):
     cocotb.start_soon(set_input(ptp, dut.router_mode_psum_i, router_mode_port))
     await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
 
-    # Enable all partial sum global buffers across all clusters
-    cocotb.start_soon(set_input(ptp,(dut.psum_enable_i), (2**(oep.Clusters_X*oep.Clusters_Y*oep.NUM_GLB_PSUM))-1))
-
-    # The PE accepts the output request only after it reaches
-    # WAIT_TO_SEND_PSUM. Keep the request asserted through computation and
-    # release it after the output stream has begun, rather than pulsing it
-    # immediately after compute_i where every PE can ignore it.
+    # In PE.v, psum_enable_i sends an IDLE PE straight to SEND_PSUM. Wait for
+    # the active PEs to finish their MAC loops before requesting the output.
+    await _wait_for_dense_pes_ready(ptp, dut, layer_params, oep)
+    cocotb.start_soon(set_input(
+        ptp, dut.psum_enable_i,
+        (1 << (oep.Clusters_X * oep.Clusters_Y * oep.NUM_GLB_PSUM)) - 1,
+    ))
     await _wait_for_dense_cluster_output(
         ptp, dut, layer_params, oep
     )
