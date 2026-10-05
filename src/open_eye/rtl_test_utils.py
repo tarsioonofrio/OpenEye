@@ -1673,6 +1673,14 @@ async def _wait_for_active_pes_ready(ptp, dut, layer_parameters, oep, layer_name
     }:
         report_iact_handoff(oep)
         report_pe_iact()
+    if os.environ.get("OPENEYE_TRACE_PE_CALC", "0").lower() in {
+        "1", "true", "yes", "on"
+    }:
+        cl_x, cl_y, pe_x, _ = active_pes[0]
+        await trace_pe_calc_loop(
+            ptp, dut, oep, cl_x=cl_x, cl_y=cl_y,
+            pe_row=0, pe_col=pe_x, max_lines=32,
+        )
     raise TimeoutError(
         f"Active {layer_name} PEs did not reach WAIT_TO_SEND_PSUM within "
         f"{max_cycles} cycles; states: {' '.join(last_states)}"
@@ -3095,17 +3103,23 @@ async def trace_pe_calc_loop(ptp, dut, oep, cl_x=0, cl_y=0, pe_row=0, pe_col=0,
     of those counters says which of the two ended it.
     """
     try:
-        fsm = (dut.OpenEye_Parallel.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
-               .pe_cluster.gen_X[pe_col].gen_Y[pe_row].pe.gen_sparse_fsm)
+        pe = (dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+              .pe_cluster.gen_X[pe_col].gen_Y[pe_row].pe)
+        fsm = pe.gen_sparse_fsm
     except Exception as exc:
         logger.error("trace_pe_calc_loop: PE unreachable (%s)", type(exc).__name__)
         return
     names = ("current_state_computing", "iact_addr_current", "iact_addr_count",
              "wght_data_vec", "wght_data_end", "wght_data_start",
-             "wght_data_SPad_addr", "values_valid", "computing")
+             "wght_data_SPad_addr", "values_valid", "computing",
+             "next_iact", "wght_start_set", "wght_end_set",
+             "mux_iact_ready")
+    pe_names = ("iact_addr_SPad_data_r", "second_spad_words_iact",
+                "second_spad_words_wght")
+    all_names = names + pe_names
     lines = 0
     prev = None
-    while lines < max_lines:
+    for _ in range(max_lines):
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
         vals = []
         for n in names:
@@ -3113,12 +3127,18 @@ async def trace_pe_calc_loop(ptp, dut, oep, cl_x=0, cl_y=0, pe_row=0, pe_col=0,
                 vals.append(int(getattr(fsm, n).value))
             except Exception:
                 vals.append(-1)
+        for n in pe_names:
+            try:
+                vals.append(int(getattr(pe, n).value))
+            except Exception:
+                vals.append(-1)
         if vals == prev:
             continue
         prev = vals
         if vals[0] == 0 and vals[8] == 0:
             continue
-        logger.error("calc %s", " ".join("%s=%d" % (n, v) for n, v in zip(names, vals)))
+        logger.error("calc %s", " ".join("%s=%d" % (n, v)
+                                         for n, v in zip(all_names, vals)))
         lines += 1
 
 
