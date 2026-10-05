@@ -2287,7 +2287,13 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                         val(pe.wght_addr_SPad_addr), val(pe.wght_addr_SPad_data_r))
             lines += 1
         if val(pe.compute_i) == 1:
-            logger.info("pw t=%s compute_i state=%s", now, val(pe.current_state_computing))
+            logger.info("pw t=%s compute_i state=%s iact_set=%s wght_set=%s "
+                        "data_set=%s iact_words=%s wght_words=%s enable_stream=%s",
+                        now, val(pe.current_state_computing), val(pe.iact_set),
+                        val(pe.wght_set), val(pe.data_set),
+                        val(pe.second_spad_words_iact),
+                        val(pe.second_spad_words_wght),
+                        val(pe.enable_stream_i))
             lines += 1
         if val(pe.iact_enable_i) not in (None, 0):
             cluster = dut.gen_x[cx].gen_y[cy]
