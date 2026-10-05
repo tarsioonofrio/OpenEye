@@ -249,6 +249,11 @@ async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, la
     await wght_thread
     if(stream[layer_repetition][strdic.stream_parallel_dict["status"]][strdic.status_dict["skipPsum"]] != 1):
         await psum_thread
+    # write_iact, write_wght and write_bias deassert their enables with
+    # start_soon and return immediately. Let the final enabled beat drain and
+    # the input pipelines commit their word counts before compute_i can clear
+    # those counters.
+    await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
     logger.info("Stream is sent.")
     if os.environ.get("OPENEYE_TRACE_IACT_HANDSHAKE", "0").lower() in {
         "1", "true", "yes", "on"
