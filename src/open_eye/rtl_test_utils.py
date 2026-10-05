@@ -1629,6 +1629,7 @@ async def _wait_for_active_pes_ready(ptp, dut, layer_parameters, oep, layer_name
         raise RuntimeError(f"No active PEs found for {layer_name} output")
 
     last_states = []
+    compute_pulse_seen = False
     for cycle in range(max_cycles):
         states = []
         all_ready = True
@@ -1643,6 +1644,19 @@ async def _wait_for_active_pes_ready(ptp, dut, layer_parameters, oep, layer_name
             all_ready &= state_value == 7  # WAIT_TO_SEND_PSUM in PE.v
         if all_ready:
             return
+        if not compute_pulse_seen and os.environ.get(
+            "OPENEYE_TRACE_IACT_HANDSHAKE", "0"
+        ).lower() in {"1", "true", "yes", "on"}:
+            try:
+                compute_mask = int(dut.compute_cluster_i_reg.value)
+            except Exception:
+                compute_mask = 0
+            if compute_mask:
+                logger.info(
+                    "compute_cluster pulse cycle=%d mask=0x%x PE gates: %s",
+                    cycle, compute_mask, _active_pe_gate_note(active_pes),
+                )
+                compute_pulse_seen = True
         last_states = states
         if cycle + 1 < max_cycles:
             await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
