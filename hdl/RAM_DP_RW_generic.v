@@ -95,12 +95,14 @@ module RAM_DP_RW_generic #(
       // but it's probably still a good idea not to allow it
 `ifndef SYNTHESIS
       if (wr_en_a_i && addr_r_a_i == addr_w_a_i) begin
-        $error("Collision between Port A/Read and Port A/Write");
+        $error("Collision between Port A/Read and Port A/Write: read=%0d write=%0d",
+               addr_r_a_i, addr_w_a_i);
         memout_a <= {DataWidth{1'bx}};
       end
 
       if (wr_en_b_i && addr_r_a_i == addr_w_b_i) begin
-        $error("Collision between Port A/Read and Port B/Write");
+        $error("Collision between Port A/Read and Port B/Write: read=%0d write=%0d",
+               addr_r_a_i, addr_w_b_i);
         memout_a <= {DataWidth{1'bx}};
       end
 `endif
@@ -114,12 +116,14 @@ module RAM_DP_RW_generic #(
       // cadence synthesis_off
       // synopsys translate_off
       if (wr_en_a_i && addr_r_b_i == addr_w_a_i) begin
-        $error("Collision between Port B/Read and Port A/Write");
+        $error("Collision between Port B/Read and Port A/Write: read=%0d write=%0d",
+               addr_r_b_i, addr_w_a_i);
         memout_b <= {DataWidth{1'bx}};
       end
 
       if (wr_en_b_i && addr_r_b_i == addr_w_b_i) begin
-        $error("Collision between Port B/Read and Port B/Write");
+        $error("Collision between Port B/Read and Port B/Write: read=%0d write=%0d",
+               addr_r_b_i, addr_w_b_i);
         memout_b <= {DataWidth{1'bx}};
       end
       // synopsys translate_on
