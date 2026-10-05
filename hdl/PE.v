@@ -2404,7 +2404,18 @@ module PE #(
   wire [PARALLEL_MACS*DATA_PSUM_BITWIDTH-1 : 0] psum_mult_combined_w;
   wire [PARALLEL_MACS*DATA_PSUM_BITWIDTH-1 : 0] psum_addr_combined_w;
   for (pmc = 0; pmc < PARALLEL_MACS; pmc=pmc+1) begin
-    assign psum_data_combined_w[pmc*DATA_PSUM_BITWIDTH+:DATA_PSUM_BITWIDTH] = psum_data_delay[pmc][DATA_PSUM_BITWIDTH-1:0];
+    if (SERIAL == 1) begin : gen_serial_psum_lane
+      // A serial PE transfers one PSUM word, so the word occupies the low lane.
+      assign psum_data_combined_w[pmc*DATA_PSUM_BITWIDTH+:DATA_PSUM_BITWIDTH]
+          = psum_data_delay[pmc][DATA_PSUM_BITWIDTH-1:0];
+    end else begin : gen_parallel_psum_lane
+      // Parallel PSUM buses pack MAC 0 in the most-significant lane, matching
+      // psum_data_o above. Select the corresponding lane for each MAC instead
+      // of feeding every adder from the low lane.
+      assign psum_data_combined_w[pmc*DATA_PSUM_BITWIDTH+:DATA_PSUM_BITWIDTH]
+          = psum_data_delay[pmc][(PARALLEL_MACS-1-pmc)*DATA_PSUM_BITWIDTH
+                                +:DATA_PSUM_BITWIDTH];
+    end
     assign psum_mult_combined_w[pmc*DATA_PSUM_BITWIDTH+:DATA_PSUM_BITWIDTH] = mult_o_w[pmc];
     assign adder_summand_2[pmc] = psum_addr_combined_w[pmc*DATA_PSUM_BITWIDTH+:DATA_PSUM_BITWIDTH];
   end
