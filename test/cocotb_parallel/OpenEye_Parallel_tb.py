@@ -223,6 +223,11 @@ async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, la
     logger.info("Send stream.")
     status_thread = cocotb.start_soon(rtl_test_utils.send_stream(ptp, dut, stream[layer_repetition], oep, lp, layer_repetition))
     await status_thread
+    # OpenEye_Parallel forwards the layer parameters through a three-cycle
+    # PE configuration stream after status_reg_enable_i falls. Let that
+    # stream drain before presenting activation/weight data, otherwise the
+    # final enable_stream_i pulse can clear the PE load flags and SPAD counts.
+    await Timer(4 * ptp.clk_cycle, unit=ptp.clk_cycle_unit)
     if(stream[layer_repetition][strdic.stream_parallel_dict["status"]][strdic.status_dict["skipPsum"]] != 1):
         psum_thread = cocotb.start_soon(rtl_test_utils.write_bias(ptp, dut, stream[layer_repetition][strdic.stream_parallel_dict["psum"]], oep, lp))
     if (layer_repetition != 0) :
