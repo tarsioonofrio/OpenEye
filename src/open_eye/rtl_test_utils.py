@@ -1947,6 +1947,12 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
     y = 0
     psum_trace_lines = 0
     psum_trace_word_lines = 0
+    try:
+        psum_trace_word_limit = max(
+            0, int(os.environ.get("OPENEYE_TRACE_PSUM_WORD_LIMIT", "32"))
+        )
+    except ValueError:
+        psum_trace_word_limit = 32
     les.current_position = 0
     if(logging.DEBUG >= login_level):
         storage_file.write(" f_corner_start: " + str(les.f_corner_start) + " y_corner_start: " + str(les.y_corner_start) + " x_corner_start: " + str(les.x_corner_start) + "\n")
@@ -2025,7 +2031,7 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                     value = int(psum_output[word_high:word_shift])
                                     if value >= 2**(oep.DATA_PSUM_BITWIDTH - 1):
                                         value -= 2**oep.DATA_PSUM_BITWIDTH
-                                    if (psum_trace_word_lines < 32
+                                    if (psum_trace_word_lines < psum_trace_word_limit
                                             and os.environ.get(
                                                 "OPENEYE_TRACE_PSUM_CAPTURE", "0"
                                             ).lower() in {"1", "true", "yes", "on"}):
