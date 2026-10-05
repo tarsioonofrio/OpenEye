@@ -895,8 +895,9 @@ class DenseIactStreamMapper(IactStreamMapper):
     def write_iact_data_glb(self, cl_x, cl_y, router):
         """Generate GLB activation data for Dense layers.
 
-        Note: Y-cluster scheduling check is disabled (commented out) for Dense layers
-        since only cl_y==0 participates in loading activations.
+        Dense K is partitioned across cluster rows and the PE rows within each
+        cluster. Each cluster row therefore receives its own contiguous slice
+        of the flattened input vector.
 
         """
         storage = []
@@ -934,8 +935,8 @@ class DenseIactStreamMapper(IactStreamMapper):
         """Generate Dense-specific activation data SPAD storage.
 
         For Dense layers, activations are loaded sequentially from a 1D vector.
-        The position is calculated simply as: base + router_offset + repetition_offset.
-        Only cl_y==0 loads actual data; other clusters remain empty.
+        Each cluster row owns ``PEs_Y * used_iact_per_PE`` consecutive K
+        values; each input router selects one PE-row slice within that block.
 
         """
         params = self.params
@@ -946,25 +947,25 @@ class DenseIactStreamMapper(IactStreamMapper):
         overhead_counter = 0
         spad_storage = [[0 for _ in range(2)] for _ in range(params.Iacts_per_PE)]
 
-        # Only first Y-cluster loads activations for Dense layers
-        if(cl_y == 0):
-            for words_in_storage in range(math.ceil(params.Iacts_per_PE)):
-                if(words_in_storage < layer_params.used_iact_per_PE):
-                    # Simple sequential 1D indexing (no spatial dimensions)
-                    # Index = local_offset + router_contribution + repetition_contribution
-                    iact_temp_pos_x = words_in_storage + \
-                    router * layer_params.used_iact_per_PE + \
-                    (layer_repetition % layer_params.iact_transmissions_pe) * params.NUM_GLB_IACT * layer_params.used_iact_per_PE
-
-                    try:
-                        # Fetch from 1D DRAM vector
-                        spad_storage[words_in_storage][0]= dram_fmap[iact_temp_pos_x]
-                    except:
-                        # Out of bounds: use 0 (not padding value 1 like Conv)
-                        spad_storage[words_in_storage][0]= 0
-                    spad_storage[words_in_storage][1]= overhead_counter
-
-                    overhead_counter = overhead_counter + 1
+        row_offset = cl_y * params.PEs_Y * layer_params.used_iact_per_PE
+        repetition_offset = (
+            (layer_repetition % layer_params.iact_transmissions_pe)
+            * params.NUM_GLB_IACT * layer_params.used_iact_per_PE
+        )
+        for words_in_storage in range(math.ceil(params.Iacts_per_PE)):
+            if words_in_storage < layer_params.used_iact_per_PE:
+                # The router indexes the PE-row partition inside this cluster.
+                iact_temp_pos_x = (
+                    row_offset + router * layer_params.used_iact_per_PE
+                    + words_in_storage + repetition_offset
+                )
+                # Out of bounds means padded K lanes, which contribute zero.
+                if iact_temp_pos_x < len(dram_fmap):
+                    spad_storage[words_in_storage][0] = dram_fmap[iact_temp_pos_x]
+                else:
+                    spad_storage[words_in_storage][0] = 0
+                spad_storage[words_in_storage][1] = overhead_counter
+                overhead_counter += 1
 
         return spad_storage
 
