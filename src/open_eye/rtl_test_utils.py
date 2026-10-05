@@ -281,6 +281,16 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
         # Set PE compute mask (which PEs are active for this layer)
         cocotb.start_soon(set_input(ptp,(dut.compute_mask_i), stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["usePEs"]]))
 
+        # The direct OpenEye_Parallel testbench must select the routed PSUM
+        # input on every PE column. Zero selects the separate pass-through
+        # path and silently bypasses the configured PSUM routers.
+        if hasattr(dut, "psum_choose_i"):
+            psum_router_mask = (
+                1 << (oep.Clusters_X * oep.Clusters_Y * oep.NUM_GLB_PSUM)
+            ) - 1
+            cocotb.start_soon(set_input(ptp, dut.psum_choose_i,
+                                        psum_router_mask))
+
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
         # Configure router modes for data distribution across clusters
         # Routers control how data flows between Global Buffers and PEs
