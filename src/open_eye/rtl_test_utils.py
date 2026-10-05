@@ -1903,6 +1903,7 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
     x = 0
     y = 0
     psum_trace_lines = 0
+    psum_trace_word_lines = 0
     les.current_position = 0
     if(logging.DEBUG >= login_level):
         storage_file.write(" f_corner_start: " + str(les.f_corner_start) + " y_corner_start: " + str(les.y_corner_start) + " x_corner_start: " + str(les.x_corner_start) + "\n")
@@ -1981,6 +1982,15 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                     value = int(psum_output[word_high:word_shift])
                                     if value >= 2**(oep.DATA_PSUM_BITWIDTH - 1):
                                         value -= 2**oep.DATA_PSUM_BITWIDTH
+                                    if (psum_trace_word_lines < 32
+                                            and os.environ.get(
+                                                "OPENEYE_TRACE_PSUM_CAPTURE", "0"
+                                            ).lower() in {"1", "true", "yes", "on"}):
+                                        logger.error(
+                                            "conv_psum_word lane=%d slot=%d f=%d x=%d y=%d value=%d",
+                                            output_lane, i, f, x, y, value,
+                                        )
+                                        psum_trace_word_lines += 1
                                     dram.fmap[layer_number + 1][f][x][y] = value
                 await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
             else:
