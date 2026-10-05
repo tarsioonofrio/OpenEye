@@ -1597,6 +1597,10 @@ async def _wait_for_signal(ptp, handle, *, name, expected=None, context="", dut=
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
     condition = "nonzero" if expected is None else str(expected)
     state = _fsm_state_note(dut) if dut is not None else ""
+    if (name == "psum_enable_o" and "convolution output" in context
+            and os.environ.get("OPENEYE_TRACE_PE_CALC", "0").lower()
+            in {"1", "true", "yes", "on"}):
+        await trace_pe_calc_loop(ptp, dut, None, max_lines=32)
     raise TimeoutError(
         f"{name} did not become {condition} within {max_cycles} cycles"
         f"{context}{state}"
