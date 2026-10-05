@@ -1464,8 +1464,8 @@ async def write_iact(ptp, dut, stream, oep, lp):
                         try:
                             iact_transmission = iact_transmission + \
                             (stream[x_cluster][y_cluster][router][position] \
-                            << ((router + x_cluster * oep.NUM_GLB_IACT + y_cluster * oep.NUM_GLB_IACT * oep.Clusters_X) * oep.IACT_Trans_Bitwidth))
-                            iact_enable_signal = iact_enable_signal + 2**(router + x_cluster * oep.NUM_GLB_IACT + y_cluster * oep.NUM_GLB_IACT * oep.Clusters_X)
+                            << (((x_cluster * oep.Clusters_Y + y_cluster) * oep.NUM_GLB_IACT + router) * oep.IACT_Trans_Bitwidth))
+                            iact_enable_signal = iact_enable_signal + 2**((x_cluster * oep.Clusters_Y + y_cluster) * oep.NUM_GLB_IACT + router)
                         except:
                             iact_enable_signal = iact_enable_signal
             if conv_layer and hasattr(dut, "iact_choose_i"):
@@ -1560,8 +1560,8 @@ async def write_wght(ptp, dut, stream, oep, lp):
                         try:
                             wght_transmission = wght_transmission + \
                             (stream[x_cluster][y_cluster][router][position] \
-                            << ((router + x_cluster * oep.NUM_GLB_WGHT + y_cluster * oep.NUM_GLB_WGHT * oep.Clusters_X) * oep.WGHT_Trans_Bitwidth))
-                            wght_enable_signal = wght_enable_signal + 2**(router + x_cluster * oep.NUM_GLB_WGHT + y_cluster * oep.NUM_GLB_WGHT * oep.Clusters_X)
+                            << (((x_cluster * oep.Clusters_Y + y_cluster) * oep.NUM_GLB_WGHT + router) * oep.WGHT_Trans_Bitwidth))
+                            wght_enable_signal = wght_enable_signal + 2**((x_cluster * oep.Clusters_Y + y_cluster) * oep.NUM_GLB_WGHT + router)
                         except:
                             wght_enable_signal = wght_enable_signal
             cocotb.start_soon(set_input(ptp,(dut.wght_data_i), wght_transmission))
