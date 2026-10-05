@@ -829,7 +829,11 @@ async def monitor_pe_iact(ptp, dut, oep, pe_col=0):
                 except Exception:
                     continue
                 pes.append(((cx, cy, row), pe))
-                pe_iact_counts[(cx, cy, row)] = {"sel": None, "en": 0, "hs": 0}
+                pe_iact_counts[(cx, cy, row)] = {
+                    "sel": None, "en": 0, "hs": 0, "input_nonzero": 0,
+                    "mux_nonzero": 0, "pipeline_en": 0,
+                    "pipeline_nonzero": 0,
+                }
 
     while True:
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
@@ -848,6 +852,16 @@ async def monitor_pe_iact(ptp, dut, oep, pe_col=0):
                 rec["en"] += 1
                 if (rdy >> sel) & 1:
                     rec["hs"] += 1
+                    try:
+                        rec["input_nonzero"] += int(int(pe.iact_data_i.value) != 0)
+                        rec["mux_nonzero"] += int(int(pe.mux_iact_a_o_w.value) != 0)
+                        pipe_en = int(pe.mux_iact_b_o_w.value)
+                        rec["pipeline_en"] += pipe_en
+                        rec["pipeline_nonzero"] += int(
+                            pipe_en and int(pe.second_spad_iact_data_w.value) != 0
+                        )
+                    except Exception:
+                        pass
 
 
 def report_pe_iact():
@@ -859,6 +873,9 @@ def report_pe_iact():
         r = pe_iact_counts[key]
         logger.error("  cluster(%d,%d) row %d: sel=%s en=%d hs=%d",
                      key[0], key[1], key[2], r["sel"], r["en"], r["hs"])
+        logger.error("    accepted payload samples input=%d mux=%d pipeline_en=%d pipeline_nonzero=%d",
+                     r["input_nonzero"], r["mux_nonzero"],
+                     r["pipeline_en"], r["pipeline_nonzero"])
 
 
 def dump_compute_mask(dut, oep):
