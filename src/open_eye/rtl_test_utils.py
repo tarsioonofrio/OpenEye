@@ -3409,13 +3409,19 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                             "1", "true", "yes", "on"
                         }:
                             pe_x = router
-                            pe = (dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+                            cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+                            pe = (cluster
                                   .pe_cluster.gen_X[pe_x].gen_Y[0].pe)
+                            pe_router_data = cluster.pe_router_psum_data_out.value[
+                                (router + 1) * oep.PSUM_Trans_Bitwidth - 1:
+                                router * oep.PSUM_Trans_Bitwidth
+                            ]
                             logger.info(
                                 "denseout cluster=(%d,%d) router=%d lane=%d "
                                 "enable=%s raw=%s PE(%d,0) state=%s select=%s "
                                 "addr=%s use_psum=%s spad_data=%s adder0=%s "
-                                "adder1=%s pe_output=%s",
+                                "adder1=%s pe_output=%s route_mode=%s "
+                                "pe_router_enable=%s pe_router_data=%s",
                                 cl_x, cl_y, router, lane, enable_value,
                                 str(raw_lane_data), pe_x,
                                 str(pe.current_state_computing.value),
@@ -3426,6 +3432,9 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                 str(pe.adder_o_w[0].value),
                                 str(pe.adder_o_w[1].value),
                                 str(pe.psum_data_o.value),
+                                str(cluster.router_mode_psum_i_w.value),
+                                str(cluster.pe_router_psum_enable_out.value),
+                                str(pe_router_data),
                             )
                         try:
                             lane_data = int(raw_lane_data)
