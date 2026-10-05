@@ -3584,6 +3584,17 @@ async def send_enable_dense(ptp, dut, layer_params, layer_repetition, oep):
         Dense layers have simpler timing than convolution as they lack
         spatial dimensions and process vector-matrix multiplication.
     """
+    # The standalone OpenEye_Parallel testbench reads directly from the PE
+    # array. DenseMapper's mode 5 forwards GLB requests toward a neighboring
+    # cluster, so use the local bidirectional GLB<->PE mode while requesting
+    # and collecting these direct-core results.
+    router_mode_port = sum(
+        4 << (3 * lane)
+        for lane in range(oep.Clusters_X * oep.Clusters_Y * oep.NUM_GLB_PSUM)
+    )
+    cocotb.start_soon(set_input(ptp, dut.router_mode_psum_i, router_mode_port))
+    await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+
     # Enable all partial sum global buffers across all clusters
     cocotb.start_soon(set_input(ptp,(dut.psum_enable_i), (2**(oep.Clusters_X*oep.Clusters_Y*oep.NUM_GLB_PSUM))-1))
 
