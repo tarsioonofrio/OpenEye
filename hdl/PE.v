@@ -668,6 +668,11 @@ module PE #(
   // [SPARSITY_EN=1 only] Weight data validity flag (always true in dense mode)
   reg                                   values_valid;           // Flag: current values are valid (not zero)
   wire [                         5 : 0] filters_reg_M0;            // Number of filters configured, in Eyeriss-Paper referenced as M0
+  // The weight data pipeline sizes its filter-count input from the address
+  // SPAD depth. Materialize that width here so the narrower six-bit config
+  // field is zero-extended instead of leaving the upper port bit undriven.
+  wire [ $clog2(WGHT_ADDR_ADDR+1)-1 : 0] first_spad_wght_max_w;
+  assign first_spad_wght_max_w = filters_reg_M0;
   wire [                         3 : 0] channel_reg_C0;            // Number of channels configured, in Eyeriss-Paper referenced as C0
   wire                                  psum_data_SPad_en_w_i [PARALLEL_MACS-1: 0];// Internal write enable
   wire                                  raw_wght_w;           // 1 = raw (uncompressed) weight stream: keep all-zero weight words
@@ -2250,7 +2255,7 @@ module PE #(
       .enable_i(wght_enable_i),
 
       .first_spad_words_o (first_spad_words_wght),
-      .first_spad_max_i   (filters_reg_M0),
+      .first_spad_max_i   (first_spad_wght_max_w),
       .second_spad_words_o(second_spad_words_wght),
 
       .first_spad_addr_o(first_spad_wght_addr_w),
