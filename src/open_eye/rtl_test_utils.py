@@ -3718,18 +3718,21 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                     except Exception as exc:
                         logger.error("Dense core cluster(%d,%d) state unreadable: %s",
                                      cl_x, cl_y, type(exc).__name__)
-            for cl_y in sorted({0, rows - 1}):
+            for cl_y in range(rows):
                 for cl_x in range(columns):
                     try:
                         cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
                         route_fields = {}
                         for name in (
+                            "psum_choose_i",
                             "router_mode_psum_i", "pe_router_psum_enable_out",
+                            "pe_router_psum_enable_in",
                             "pe_router_psum_ready_in", "delay_cluster_enable_in",
                             "delay_cluster_enable_out", "delay_cluster_ready_out",
                             "delay_psum_glb_i", "delay_cluster_data_in",
                             "delay_cluster_data_out", "glb_cluster_psum_enable_w",
-                            "glb_cluster_psum_ready_w",
+                            "glb_cluster_psum_ready_w", "ext_mem_psum_enable_i",
+                            "ext_mem_psum_enable_o", "ext_mem_psum_ready_i",
                         ):
                             try:
                                 route_fields[name] = str(getattr(cluster, name).value)
@@ -3741,6 +3744,30 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                             " ".join(f"{name}={value}"
                                      for name, value in route_fields.items()),
                         )
+                        for pe_y in range(oep.PEs_Y):
+                            try:
+                                pe = cluster.pe_cluster.gen_X[0].gen_Y[pe_y].pe
+                                pe_fields = {}
+                                for name in (
+                                    "current_state_computing", "psum_enable_i",
+                                    "psum_ready_i", "psum_enable_o", "psum_ready_o",
+                                    "psum_data_i", "psum_data_o",
+                                ):
+                                    try:
+                                        pe_fields[name] = str(getattr(pe, name).value)
+                                    except Exception:
+                                        pe_fields[name] = "?"
+                                logger.error(
+                                    "Dense core PE PSUM cluster(%d,%d) pe(0,%d): %s",
+                                    cl_x, cl_y, pe_y,
+                                    " ".join(f"{name}={value}"
+                                             for name, value in pe_fields.items()),
+                                )
+                            except Exception as exc:
+                                logger.error(
+                                    "Dense core PE PSUM cluster(%d,%d) pe(0,%d) unreadable: %s",
+                                    cl_x, cl_y, pe_y, type(exc).__name__,
+                                )
                     except Exception as exc:
                         logger.error("Dense core PSUM path cluster(%d,%d) unreadable: %s",
                                      cl_x, cl_y, type(exc).__name__)
