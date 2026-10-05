@@ -1443,8 +1443,10 @@ async def write_iact(ptp, dut, stream, oep, lp):
             1, oep.IACT_Trans_Bitwidth // oep.IACT_WOH_Bitwidth
         )
     if(lp.skipIact != 1):
-        while (dut.iact_ready_o.value == 0): #TODO: ADAPT for Sparsetiy
-            await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+        await _wait_for_signal(
+            ptp, dut.iact_ready_o, name="iact_ready_o",
+            context=" before writing activations", dut=dut,
+        )
         conv_layer = "Conv" in str(lp.layer_name) or "Depthwise" in str(lp.layer_name)
         selector_bits = oep.NUM_GLB_IACT.bit_length()
         selector_values_per_word = max(
@@ -1542,8 +1544,12 @@ async def write_wght(ptp, dut, stream, oep, lp):
     wght_enable_signal = 0
     wght_transmission = 0
     if(lp.skipWght != 1):
-        while (dut.wght_ready_o.value != ((2**(oep.Clusters_X*oep.Clusters_Y*oep.NUM_GLB_WGHT))-1)):
-            await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+        await _wait_for_signal(
+            ptp, dut.wght_ready_o,
+            name="wght_ready_o",
+            expected=(1 << (oep.Clusters_X * oep.Clusters_Y * oep.NUM_GLB_WGHT)) - 1,
+            context=" before writing weights", dut=dut,
+        )
 
         cocotb.start_soon(set_input(ptp,(dut.wght_enable_i), (2**(oep.Clusters_X*oep.Clusters_Y*oep.NUM_GLB_WGHT))-1))
         for position in range(len(stream[0][0][0])):
