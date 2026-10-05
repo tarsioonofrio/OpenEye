@@ -98,6 +98,14 @@ module OpenEye_FPGA_gemm_workload_tb;
                  dut.compute_reg, dut.wght_enable_i_reg,
                  dut.psum_enable_o, dut.psum_ready_o_reg,
                  dut.fsm_psum_current_state, dut.psum_transmitted);
+        $display("psum_cycle=%0d psum_cycle_count=%0d psum_ready_i=%h results_ready=%b psum_enable_i=%h choose=%h router=%h",
+                 dut.psum_pipeline_inst.fsm_psum_cycle,
+                 dut.psum_pipeline_inst.psum_cycle_count,
+                 dut.psum_pipeline_inst.psum_ready_i_reg,
+                 dut.psum_pipeline_inst.results_ready,
+                 dut.psum_pipeline_inst.psum_enable_i_reg,
+                 dut.psum_choose_i_reg,
+                 dut.psum_pipeline_inst.router_mode_psum);
         $fatal(1, "GEMM row %0d output count %0d, expected %0d",
                row_index, output_index, `GEMM_OUTPUT_COUNT);
       end
