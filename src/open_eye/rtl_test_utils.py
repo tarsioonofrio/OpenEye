@@ -3254,7 +3254,11 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                             fields = []
                             for name in ("iact_addr_max_reg", "channel_reg_C0",
                                          "filters_reg_M0", "iact_addr_current",
-                                         "wght_data_vec", "wght_data_end"):
+                                         "wght_data_vec", "wght_data_end",
+                                         "iact_set", "wght_set", "data_set",
+                                         "compute_i", "compute_pending",
+                                         "second_spad_words_iact",
+                                         "second_spad_words_wght"):
                                 try:
                                     fields.append("%s=%s" %
                                                   (name, str(getattr(pe, name).value)))
