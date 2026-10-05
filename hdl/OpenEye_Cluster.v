@@ -130,6 +130,7 @@ module OpenEye_Cluster #(
     parameter CLUSTERS            = CLUSTER_COLUMNS * CLUSTER_ROWS,
     parameter IACT_MEM_ADDR_WORDS = 512,
     parameter IACT_MEM_ADDR_BITS  = $clog2(IACT_MEM_ADDR_WORDS),
+    parameter IACT_DATA_WORDS     = 16,
     parameter PSUM_MEM_ADDR_WORDS = 384,
     parameter PSUM_MEM_ADDR_BITS  = $clog2(PSUM_MEM_ADDR_WORDS),
     parameter BANO_MODES          = 2,
@@ -293,6 +294,8 @@ module OpenEye_Cluster #(
       .TRANS_BITWIDTH_PSUM(TRANS_BITWIDTH_PSUM),
       .DATA_IACT_OVERHEAD (DATA_IACT_OVERHEAD),
       .NUM_GLB_IACT       (NUM_GLB_IACT),
+
+      .IACT_DATA_WORDS(IACT_DATA_WORDS),
 
       .PE_ROWS   (PE_ROWS),
       .PE_COLUMNS(PE_COLUMNS)

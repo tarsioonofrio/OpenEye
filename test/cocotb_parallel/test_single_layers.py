@@ -60,7 +60,8 @@ USE_SPARSE_IACTS, USE_SPARSE_WGHTS, USE_RANDOM_VALUES, LOGGER_LEVEL, CLUSTER_ROW
         toplevel=toplevel,
         module=module,
         sim_build=target_dir,
-        parameters={"CLUSTER_ROWS": CLUSTER_ROWS, "SERIAL": 1, "PE_SERIAL": 0},
+        parameters={"CLUSTER_ROWS": CLUSTER_ROWS, "SERIAL": 1,
+                    "PE_SERIAL": 0, "IACT_DATA_WORDS": 1024},
         testcase='single_layer_test',
         force_compile=True,
         # Full traces can consume gigabytes on large feature maps. Enable
@@ -153,7 +154,7 @@ def test_depthwise_conv_layer(STRIDE,KERNEL_SIZE_X,KERNEL_SIZE_Y,INPUT_SIZE,INPU
         toplevel=toplevel,
         module=module,
         sim_build=target_dir,
-        parameters={"SERIAL": 1, "PE_SERIAL": 0},
+        parameters={"SERIAL": 1, "PE_SERIAL": 0, "IACT_DATA_WORDS": 1024},
         testcase='single_layer_test',
         force_compile=True,
         #waves=True,
@@ -198,6 +199,7 @@ def test_fc_layer(INPUT_SIZE, OUTPUT_SIZE, tmp_path):
         parameters={
             "SERIAL": 1,
             "PE_SERIAL": 0,
+            "IACT_DATA_WORDS": 1024,
             "SPARSITY_EN": 0,
             "TRANS_BITWIDTH_IACT": 16,
             "TRANS_BITWIDTH_WGHT": 16,

@@ -156,6 +156,7 @@ module OpenEye_Parallel #(
     parameter  IACT_ADDR_PER_PE    = 9,
     parameter  WGHT_ADDR_PER_PE    = 16,
     parameter  IACT_MEM_ADDR_WORDS = 512,
+    parameter  IACT_DATA_WORDS     = 16,
     parameter  PSUM_MEM_ADDR_WORDS = 384,
     parameter  ROUTER_MODES_IACT   = 6,
     parameter  ROUTER_MODES_WGHT   = 1,
@@ -674,6 +675,7 @@ module OpenEye_Parallel #(
             .PE_COLUMNS(PE_COLUMNS),
 
             .IACT_MEM_ADDR_WORDS(IACT_MEM_ADDR_WORDS),
+            .IACT_DATA_WORDS(IACT_DATA_WORDS),
             .PSUM_MEM_ADDR_WORDS(PSUM_MEM_ADDR_WORDS),
 
             .LEFT_CLUSTER  (clusters_x == 0),
