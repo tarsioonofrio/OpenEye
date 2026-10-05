@@ -155,6 +155,7 @@ module PE_cluster #(
     //Set parameters
     parameter  IS_TOPLEVEL            = 1,
     parameter  SERIAL                 = 1,
+    parameter  PE_SERIAL              = SERIAL,
     `ifdef USE_INTERNAL_PARAMS_PE_cluster
       parameter  PARALLEL_MACS          = 2,
       parameter  SPARSITY_EN            = 1,  // 1=sparse mode (default), 0=dense mode
@@ -309,7 +310,7 @@ module PE_cluster #(
                             :(i+j*PE_COLUMNS)*$clog2(NUM_GLB_IACT+1)];
         `PE_MODULE #(
             .IS_TOPLEVEL           (0),
-            .SERIAL                (SERIAL),
+            .SERIAL                (PE_SERIAL),
             .PARALLEL_MACS         (PARALLEL_MACS),
             .SPARSITY_EN           (SPARSITY_EN),
             .SYSTOLIC_GEMM_EN      (SYSTOLIC_GEMM_EN),

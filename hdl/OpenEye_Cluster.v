@@ -107,6 +107,7 @@
 
 module OpenEye_Cluster #(
     parameter SERIAL              = 0,
+    parameter PE_SERIAL           = SERIAL,
     parameter LEFT_CLUSTER        = 0,
     parameter TOP_CLUSTER         = 0,
     parameter PARALLEL_MACS       = 2,
@@ -278,6 +279,7 @@ module OpenEye_Cluster #(
   PE_cluster #(
       .IS_TOPLEVEL(0),
       .SERIAL     (SERIAL),
+      .PE_SERIAL  (PE_SERIAL),
       .PARALLEL_MACS(PARALLEL_MACS),
       .TOP_CLUSTER(TOP_CLUSTER),
       .SPARSITY_EN(SPARSITY_EN),

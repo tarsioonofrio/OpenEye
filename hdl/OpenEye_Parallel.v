@@ -138,6 +138,9 @@ module OpenEye_Parallel #(
     ///Set parameters
     parameter  IS_TOPLEVEL         = 1,
     parameter  SERIAL              = 0,
+    // Keep the PE MAC organization independent from the GLB streaming mode.
+    // Direct-core tests can bypass GLB RAMs while still exercising parallel PEs.
+    parameter  PE_SERIAL            = SERIAL,
     parameter  SPARSITY_EN         = 1,  // 1=sparse mode (default), 0=dense mode
     parameter  DATA_IACT_BITWIDTH  = 8,
     parameter  DATA_PSUM_BITWIDTH  = 20,
@@ -649,6 +652,7 @@ module OpenEye_Parallel #(
 
         OpenEye_Cluster #(
             .SERIAL            (SERIAL),
+            .PE_SERIAL         (PE_SERIAL),
             .PARALLEL_MACS     (PARALLEL_MACS),
             .CLUSTER_COLUMNS   (CLUSTER_COLUMNS),
             .CLUSTER_ROWS      (CLUSTER_ROWS),
