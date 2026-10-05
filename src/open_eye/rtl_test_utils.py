@@ -327,19 +327,14 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
         # Configure router modes for data distribution across clusters
         # Routers control how data flows between Global Buffers and PEs
 
-        # Set router mode for input activations
-        # Each router has a mode value that determines routing pattern
-        # Modes are packed into a single port with bit-shifting
+        # Set router mode for input activations. OpenEye_Parallel flattens
+        # clusters x-major, then y, with the router index as the inner lane.
         router_mode_port = 0
         for cl_x in range(oep.Clusters_X):
             for cl_y in range(oep.Clusters_Y):
                 for router in range(oep.NUM_GLB_IACT):
-                    # Pack router modes: each router gets its own bit field
-                    # The RTL flattens clusters with X as the inner dimension.
                     router_mode_port = router_mode_port + (stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["router_iact"]][cl_x][cl_y][router] << \
-                                                        (oep.Iact_Router_Bits * router + \
-                                                            oep.Iact_Router_Bits * oep.NUM_GLB_IACT * cl_x + \
-                                                            oep.Iact_Router_Bits * oep.NUM_GLB_IACT * oep.Clusters_X * cl_y))
+                                                        (oep.Iact_Router_Bits * ((cl_x * oep.Clusters_Y + cl_y) * oep.NUM_GLB_IACT + router)))
         cocotb.start_soon(set_input(ptp,(dut.router_mode_iact_i), router_mode_port))
 
         # Set router mode for weights
@@ -348,9 +343,7 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
             for cl_y in range(oep.Clusters_Y):
                 for router in range(oep.NUM_GLB_WGHT):
                     router_mode_port = router_mode_port + (stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["router_wght"]][cl_x][cl_y][router] << \
-                                                        (oep.Wght_Router_Bits * router + \
-                                                            oep.Wght_Router_Bits * oep.NUM_GLB_WGHT * cl_x + \
-                                                            oep.Wght_Router_Bits * oep.NUM_GLB_WGHT * oep.Clusters_X * cl_y))
+                                                        (oep.Wght_Router_Bits * ((cl_x * oep.Clusters_Y + cl_y) * oep.NUM_GLB_WGHT + router)))
         cocotb.start_soon(set_input(ptp,(dut.router_mode_wght_i), router_mode_port))
 
         # Set router mode for partial sums
