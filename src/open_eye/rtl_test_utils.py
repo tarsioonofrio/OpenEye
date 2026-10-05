@@ -1902,6 +1902,7 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
     f = 0
     x = 0
     y = 0
+    psum_trace_lines = 0
     les.current_position = 0
     if(logging.DEBUG >= login_level):
         storage_file.write(" f_corner_start: " + str(les.f_corner_start) + " y_corner_start: " + str(les.y_corner_start) + " x_corner_start: " + str(les.x_corner_start) + "\n")
@@ -1935,6 +1936,39 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                     outputvalue = int(psum_output[upper_limit - 1:lower_limit])
                                 except ValueError:
                                     outputvalue = None
+                                if (outputvalue is not None and psum_trace_lines < 32
+                                        and os.environ.get(
+                                            "OPENEYE_TRACE_PSUM_CAPTURE", "0"
+                                        ).lower() in {"1", "true", "yes", "on"}):
+                                    actual_x = oep.Clusters_X - x_cluster - 1
+                                    actual_y = oep.Clusters_Y - y_cluster - 1
+                                    cluster = (dut.gen_x[actual_x].gen_y[actual_y]
+                                               .OpenEye_Cluster)
+                                    signals = []
+                                    for signal_name in (
+                                        "pe_router_psum_enable_out",
+                                        "pe_router_psum_data_out",
+                                        "delay_cluster_enable_in",
+                                        "delay_cluster_data_in",
+                                        "delay_cluster_enable_out",
+                                        "delay_cluster_data_out",
+                                        "glb_cluster_psum_enable_w",
+                                        "glb_cluster_psum_data_w",
+                                    ):
+                                        try:
+                                            value = str(getattr(
+                                                cluster, signal_name
+                                            ).value)
+                                        except Exception:
+                                            value = "?"
+                                        signals.append(f"{signal_name}={value}")
+                                    logger.error(
+                                        "conv_psum cluster=(%d,%d) router=%d "
+                                        "output_lane=%d value=%d %s",
+                                        actual_x, actual_y, router, output_lane,
+                                        outputvalue, " ".join(signals),
+                                    )
+                                    psum_trace_lines += 1
                                 if(logging.DEBUG >= login_level and outputvalue is not None):
                                     txt_file.write(bin(outputvalue)[2:].zfill(oep.PSUM_Trans_Bitwidth) + "\n")
                                 for i in range(oep.PARALLEL_MACS):
