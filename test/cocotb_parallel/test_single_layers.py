@@ -61,7 +61,8 @@ USE_SPARSE_IACTS, USE_SPARSE_WGHTS, USE_RANDOM_VALUES, LOGGER_LEVEL, CLUSTER_ROW
         module=module,
         sim_build=target_dir,
         parameters={"CLUSTER_ROWS": CLUSTER_ROWS, "SERIAL": 1,
-                    "PE_SERIAL": 0, "IACT_DATA_WORDS": 1024},
+                    "PE_SERIAL": 0, "SPARSITY_EN": 0,
+                    "IACT_DATA_WORDS": 1024},
         testcase='single_layer_test',
         force_compile=True,
         # Full traces can consume gigabytes on large feature maps. Enable
@@ -85,6 +86,7 @@ USE_SPARSE_IACTS, USE_SPARSE_WGHTS, USE_RANDOM_VALUES, LOGGER_LEVEL, CLUSTER_ROW
                     ,"USE_SPARSE_IACTS" : str(USE_SPARSE_IACTS)
                     ,"USE_SPARSE_WGHTS" : str(USE_SPARSE_WGHTS)
                     ,"USE_RANDOM_VALUES" : str(USE_RANDOM_VALUES)
+                    ,"SPARSITY_EN" : "0"
                     ,"CLUSTER_ROWS" : str(CLUSTER_ROWS)
                     ,"LOGGER_LEVEL" : str(LOGGER_LEVEL)}
     )
