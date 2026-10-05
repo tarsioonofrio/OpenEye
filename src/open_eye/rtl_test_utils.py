@@ -2278,6 +2278,11 @@ async def trace_pe_wght_writes(ptp, dut, oep):
         if val(pe.compute_i) == 1:
             logger.info("pw t=%s compute_i state=%s", now, val(pe.current_state_computing))
             lines += 1
+        if val(pe.iact_enable_i) not in (None, 0):
+            logger.info("pw t=%s IA ingress en=%s ready=%s select=%s data=%s spad_we=%s",
+                        now, val(pe.iact_enable_i), val(pe.iact_ready_o),
+                        val(pe.iact_select_i), val(pe.iact_data_i), val(isp.we_i))
+            lines += 1
         if val(ws.we_i) == 1:
             d = val(ws.data_i)
             logger.info("pw t=%s W addr=%s pay0=%s", now, val(ws.addr_i), None if d is None else (d & 0xFF))
