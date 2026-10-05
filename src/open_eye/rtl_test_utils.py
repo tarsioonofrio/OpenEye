@@ -1926,10 +1926,12 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                     for x_cluster in reversed(range(oep.Clusters_X)):
                         for router in reversed(range(oep.NUM_GLB_PSUM)):
                             if(layer_parameters.computing_mx[oep.Clusters_X-x_cluster-1][oep.Clusters_Y-y_cluster-1][0][oep.NUM_GLB_PSUM-router-1]== 1):
-                                output_lane = ((y_cluster * oep.Clusters_X + x_cluster) * oep.NUM_GLB_PSUM + router)
+                                actual_x = oep.Clusters_X - x_cluster - 1
+                                actual_y = oep.Clusters_Y - y_cluster - 1
+                                output_lane = ((actual_y * oep.Clusters_X + actual_x) * oep.NUM_GLB_PSUM + router)
                                 if dut.psum_enable_o.value[output_lane] != 1:
                                     continue
-                                lower_limit = ((y_cluster * oep.Clusters_X + x_cluster) * oep.NUM_GLB_PSUM + router) * oep.PSUM_Trans_Bitwidth
+                                lower_limit = output_lane * oep.PSUM_Trans_Bitwidth
                                 upper_limit = lower_limit + oep.PSUM_Trans_Bitwidth
                                 psum_output = dut.psum_data_o.value
                                 try:
@@ -1940,8 +1942,6 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                         and os.environ.get(
                                             "OPENEYE_TRACE_PSUM_CAPTURE", "0"
                                         ).lower() in {"1", "true", "yes", "on"}):
-                                    actual_x = oep.Clusters_X - x_cluster - 1
-                                    actual_y = oep.Clusters_Y - y_cluster - 1
                                     cluster = (dut.gen_x[actual_x].gen_y[actual_y]
                                                .OpenEye_Cluster)
                                     signals = []
