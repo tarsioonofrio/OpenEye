@@ -3389,16 +3389,23 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                     lanes.append(str(dut.psum_data_o.value[hi:lo]))
                 cluster = dut.gen_x[0].gen_y[0].OpenEye_Cluster
                 pe_routes = []
+                delayed_inputs = []
+                delayed_outputs = []
                 for route_idx in range(oep.NUM_GLB_PSUM):
                     lo = route_idx * oep.PSUM_Trans_Bitwidth
                     hi = lo + oep.PSUM_Trans_Bitwidth - 1
                     pe_routes.append(str(cluster.pe_router_psum_data_out.value[hi:lo]))
+                    delayed_inputs.append(str(cluster.delay_cluster_data_in.value[hi:lo]))
+                    delayed_outputs.append(str(cluster.delay_cluster_data_out.value[hi:lo]))
                 logger.info(
                     "densebus cycle=%d enable=%s lanes=%s route_mode=%s "
-                    "pe_route_en=%s pe_routes=%s",
+                    "pe_route_en=%s pe_routes=%s delay=%s delay_in=%s "
+                    "delay_out=%s glb_w=%s",
                     psum_pe, str(dut.psum_enable_o.value), lanes,
                     str(cluster.router_mode_psum_i.value),
                     str(cluster.pe_router_psum_enable_out.value), pe_routes,
+                    str(cluster.delay_psum_glb_i.value), delayed_inputs,
+                    delayed_outputs, str(cluster.glb_cluster_psum_data_w.value),
                 )
             for cl_y in range(rows):
                 for cl_x in range(columns):
