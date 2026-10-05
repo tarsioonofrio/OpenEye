@@ -330,6 +330,15 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
                                                         (oep.Psum_Router_Bits * router + \
                                                             oep.Psum_Router_Bits * oep.NUM_GLB_PSUM * cl_x + \
                                                             oep.Psum_Router_Bits * oep.NUM_GLB_PSUM * oep.Clusters_X * cl_y))
+        if not hasattr(dut, "enable_dma_o"):
+            # The direct core testbench injects bias and collects results on
+            # the same GLB ports. Keep each local GLB<->PE PSUM route active;
+            # mapper modes may instead forward those words to another cluster.
+            router_mode_port = sum(
+                4 << (oep.Psum_Router_Bits * lane)
+                for lane in range(oep.Clusters_X * oep.Clusters_Y
+                                  * oep.NUM_GLB_PSUM)
+            )
         cocotb.start_soon(set_input(ptp,(dut.router_mode_psum_i), router_mode_port))
         router_mode_port = 0
 
