@@ -1413,6 +1413,15 @@ async def write_iact(ptp, dut, stream, oep, lp):
     if(lp.skipIact != 1):
         while (dut.iact_ready_o.value == 0): #TODO: ADAPT for Sparsetiy
             await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+        conv_layer = "Conv" in str(lp.layer_name) or "Depthwise" in str(lp.layer_name)
+        selector_bits = oep.NUM_GLB_IACT.bit_length()
+        selector_values_per_word = max(
+            1, oep.IACT_Trans_Bitwidth // oep.IACT_WOH_Bitwidth
+        )
+        selector_words_per_write = max(
+            1, math.ceil(lp.used_iact_per_PE / selector_values_per_word)
+        )
+        selector_write_count = max(1, lp.needed_Iact_writes)
         for position in range(len(stream[0][0][0])):
             iact_enable_signal = 0
             for x_cluster in range(oep.Clusters_X):
@@ -1425,6 +1434,40 @@ async def write_iact(ptp, dut, stream, oep, lp):
                             iact_enable_signal = iact_enable_signal + 2**(router + x_cluster * oep.NUM_GLB_IACT + y_cluster * oep.NUM_GLB_IACT * oep.Clusters_X)
                         except:
                             iact_enable_signal = iact_enable_signal
+            if conv_layer and hasattr(dut, "iact_choose_i"):
+                # ConvIactStreamMapper appends one fixed-size SPAD block per
+                # iact_cycle. Mirror iact_stream_constructor's current_mod
+                # bank window as those blocks are loaded into the direct core.
+                selector_write = (
+                    position // selector_words_per_write
+                ) % selector_write_count
+                selector_base = selector_write * oep.NUM_GLB_IACT
+                iact_choose = 0
+                for cluster_x in range(oep.Clusters_X):
+                    for cluster_y in range(oep.Clusters_Y):
+                        for pe_y in range(oep.PEs_Y):
+                            for pe_x in range(oep.PEs_X):
+                                pe_index = (
+                                    (cluster_x * oep.Clusters_Y + cluster_y)
+                                    * oep.PEs + pe_y * oep.PEs_X + pe_x
+                                )
+                                activation_index = pe_x * lp.strideX + pe_y
+                                if (selector_base <= activation_index
+                                        < selector_base + oep.NUM_GLB_IACT):
+                                    bank = activation_index - selector_base
+                                else:
+                                    bank = oep.NUM_GLB_IACT
+                                iact_choose |= bank << (pe_index * selector_bits)
+                cocotb.start_soon(set_input(
+                    ptp, dut.iact_choose_i, iact_choose
+                ))
+                if (position % selector_words_per_write == 0
+                        and os.environ.get("OPENEYE_TRACE_PE_WRITES", "0").lower()
+                        in {"1", "true", "yes", "on"}):
+                    logger.info(
+                        "write_iact selector position=%d write=%d base=%d value=%x",
+                        position, selector_write, selector_base, iact_choose,
+                    )
             if os.environ.get("OPENEYE_TRACE_PE_WRITES", "0").lower() in {
                 "1", "true", "yes", "on"
             }:

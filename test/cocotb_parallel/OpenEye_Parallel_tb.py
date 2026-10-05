@@ -228,23 +228,6 @@ async def single_layer_test(dut):
 async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, layer_es, dram, log_level, layer_number, layer, output_order):
     global status_thread, iact_thread, wght_thread, psum_thread
     logger.info("Send stream.")
-    if ("Conv" in str(layer) or "Depthwise" in str(layer)) and hasattr(dut, "iact_choose_i"):
-        # The FPGA activation stream constructor selects a GLB bank per PE.
-        # This direct-core test bypasses that constructor, so reproduce its
-        # first-window bank assignment: PE (x, y) reads the bank at x*stride+y,
-        # or the disabled sentinel when that bank is outside the GLB array.
-        selector_bits = oep.NUM_GLB_IACT.bit_length()
-        iact_choose = 0
-        for cluster_x in range(oep.Clusters_X):
-            for cluster_y in range(oep.Clusters_Y):
-                for pe_y in range(oep.PEs_Y):
-                    for pe_x in range(oep.PEs_X):
-                        pe_index = (cluster_x * oep.Clusters_Y + cluster_y) * oep.PEs + pe_y * oep.PEs_X + pe_x
-                        bank = pe_x * lp.strideX + pe_y
-                        bank = min(bank, oep.NUM_GLB_IACT)
-                        iact_choose |= bank << (pe_index * selector_bits)
-        await rtl_test_utils.set_input(ptp, dut.iact_choose_i, iact_choose)
-        logger.info("Convolution iact_choose_i configured for direct core: 0x%x", iact_choose)
     status_thread = cocotb.start_soon(rtl_test_utils.send_stream(ptp, dut, stream[layer_repetition], oep, lp, layer_repetition))
     await status_thread
     # OpenEye_Parallel forwards the layer parameters through a three-cycle
