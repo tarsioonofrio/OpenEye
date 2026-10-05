@@ -2255,6 +2255,12 @@ async def trace_pe_wght_writes(ptp, dut, oep):
         except ValueError:
             return None
 
+    def raw(sig):
+        try:
+            return str(sig.value)
+        except Exception:
+            return "?"
+
     try:
         wa = getattr(pe, "gen_wght_addr_spad").weight_addr_SPad
     except Exception as exc:
@@ -2279,8 +2285,17 @@ async def trace_pe_wght_writes(ptp, dut, oep):
             logger.info("pw t=%s compute_i state=%s", now, val(pe.current_state_computing))
             lines += 1
         if val(pe.iact_enable_i) not in (None, 0):
-            logger.info("pw t=%s IA ingress en=%s ready=%s select=%s data=%s spad_we=%s",
-                        now, val(pe.iact_enable_i), val(pe.iact_ready_o),
+            cluster = dut.gen_x[cx].gen_y[cy]
+            logger.info("pw t=%s IA ingress top_data=%s top_en=%s top_ready=%s "
+                        "reg_data=%s reg_en=%s cluster_data=%s cluster_en=%s "
+                        "mode=%s en=%s ready=%s select=%s data=%s spad_we=%s",
+                        now, raw(dut.iact_data_i), raw(dut.iact_enable_i),
+                        raw(dut.iact_ready_o), raw(dut.iact_data_i_reg),
+                        raw(dut.iact_enable_i_reg),
+                        raw(cluster.iact_data_i_cluster_w),
+                        raw(cluster.iact_enable_i_cluster_w),
+                        raw(cluster.router_mode_iact_i_w),
+                        val(pe.iact_enable_i), val(pe.iact_ready_o),
                         val(pe.iact_select_i), val(pe.iact_data_i), val(isp.we_i))
             lines += 1
         if val(ws.we_i) == 1:
