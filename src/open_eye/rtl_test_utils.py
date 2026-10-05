@@ -3371,7 +3371,7 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                 for pe_x in range(oep.PEs_X):
                                     for pe_y in range(oep.PEs_Y):
                                         pe = cluster.pe_cluster.gen_X[pe_x].gen_Y[pe_y].pe
-                                        pe_states.append(
+                                        detail = (
                                             "(%d,%d):state=%s,psum=%s,adder=%s,computing=%s"
                                             % (pe_x, pe_y,
                                                str(pe.current_state_computing.value),
@@ -3379,6 +3379,50 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                                str(pe.adder_o_w[0].value),
                                                str(pe.computing.value))
                                         )
+                                        if pe_x == 0 and pe_y == 0:
+                                            names = (
+                                                "values_valid", "raw_wght_w",
+                                                "second_spad_words_iact",
+                                                "second_spad_words_wght",
+                                                "iact_data_current_3", "mult_fac_1",
+                                                "mult_fac_2", "mult_o_w",
+                                                "adder_summand_1", "adder_summand_2",
+                                                "psum_data_SPad_en_r", "psum_data_SPad_en_w",
+                                                "psum_spad_addr_r", "psum_spad_addr_w",
+                                            )
+                                            signals = []
+                                            for name in names:
+                                                try:
+                                                    value = getattr(pe, name)
+                                                    if name in {
+                                                        "mult_fac_1", "mult_fac_2", "mult_o_w",
+                                                        "adder_summand_1", "adder_summand_2",
+                                                        "psum_data_SPad_en_r", "psum_data_SPad_en_w",
+                                                        "psum_spad_addr_r", "psum_spad_addr_w",
+                                                    }:
+                                                        value = [str(value[i].value)
+                                                                 for i in range(oep.PARALLEL_MACS)]
+                                                    else:
+                                                        value = str(value.value)
+                                                    signals.append("%s=%s" % (name, value))
+                                                except Exception:
+                                                    pass
+                                            for name, path in (
+                                                ("iact_spad", "iact_data_SPad"),
+                                                ("weight_spad", "weight_data_SPad"),
+                                            ):
+                                                try:
+                                                    memory = getattr(pe, path).ram.impl.mem
+                                                    signals.append(
+                                                        "%s=%s" % (name, [
+                                                            str(memory[i].value)
+                                                            for i in range(min(8, len(memory)))
+                                                        ])
+                                                    )
+                                                except Exception:
+                                                    pass
+                                            detail += " details=" + " ".join(signals)
+                                        pe_states.append(detail)
                             except Exception as diag_exc:
                                 pe_states.append("unavailable:%s" % type(diag_exc).__name__)
                             logger.error(
