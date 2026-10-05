@@ -1062,22 +1062,29 @@ class DwIactStreamMapper(IactStreamMapper):
         layer_params = self.layer_params
         params = self.params
 
-        data_per_trans = math.floor(params.IACT_Trans_Bitwidth/params.IACT_Bitwidth)
-        line_counter = 0
+        data_per_trans = math.floor(
+            params.IACT_Trans_Bitwidth / params.IACT_WOH_Bitwidth
+        )
+        overhead_width = params.IACT_WOH_Bitwidth - params.IACT_Bitwidth
         stream = []
-        for spad_data_trans in range(math.ceil(params.Iacts_per_PE/data_per_trans)):
+        transfer_count = math.ceil(layer_params.used_iact_per_PE / data_per_trans)
+        for spad_data_trans in range(transfer_count):
             temp_trans = 0
             for data_in_trans in range(data_per_trans):
-                try:
-                    number_of_value = (data_in_trans + spad_data_trans * data_per_trans)
-                    value = gtu.to_twos_complement_string(spad[number_of_value][0], self.params.IACT_Bitwidth)
-                    temp_trans = temp_trans + (int(value,2) << (data_in_trans * params.IACT_Bitwidth))
-                except:
-                    pass
+                number_of_value = data_in_trans + spad_data_trans * data_per_trans
+                if number_of_value >= len(spad):
+                    continue
+                value = gtu.to_twos_complement_string(
+                    spad[number_of_value][0], params.IACT_Bitwidth
+                )
+                overhead = gtu.to_twos_complement_string(
+                    spad[number_of_value][1], overhead_width
+                )
+                packed_value = int(overhead + value, 2)
+                temp_trans |= packed_value << (
+                    data_in_trans * params.IACT_WOH_Bitwidth
+                )
             stream.append(temp_trans)
-            line_counter = line_counter + 1
-            if (line_counter == math.ceil(layer_params.used_iact_per_PE/data_per_trans)):
-                break
         return stream
     
     def write_iact_data_storage(self, cl_x, cl_y, router, cycle, iact_cycle):
