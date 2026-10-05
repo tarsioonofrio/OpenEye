@@ -1587,35 +1587,36 @@ async def _wait_for_signal(ptp, handle, *, name, expected=None, context="", dut=
     )
 
 
-async def _wait_for_masked_signal(ptp, handle, mask, *, name, context="", dut=None):
-    """Wait until at least one selected lane is asserted on a packed signal."""
-    max_cycles = _max_wait_cycles()
-    for _ in range(max_cycles):
-        try:
-            value = int(handle.value)
-        except (TypeError, ValueError):
-            value = 0
-        if value & mask:
-            return value
-        await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
-    state = _fsm_state_note(dut) if dut is not None else ""
-    raise TimeoutError(
-        f"{name} lanes 0x{mask:x} did not assert within {max_cycles} cycles"
-        f"{context}{state}"
+def _dense_active_router_mask(layer_parameters, cl_x, cl_y, oep):
+    """Return active PE-column lanes for one cluster's PSUM router."""
+    return sum(
+        1 << router
+        for router in range(oep.NUM_GLB_PSUM)
+        if layer_parameters.computing_mx[cl_x][cl_y][0][router]
     )
 
 
-def _dense_active_output_mask(layer_parameters, oep):
-    """Map active dense PEs to their externally packed PSUM output lanes."""
-    mask = 0
-    for cl_y in range(oep.Clusters_Y):
-        for cl_x in range(oep.Clusters_X):
-            for router in range(oep.NUM_GLB_PSUM):
-                if layer_parameters.computing_mx[cl_x][cl_y][0][router]:
-                    lane = ((cl_y * oep.Clusters_X + cl_x)
-                            * oep.NUM_GLB_PSUM + router)
-                    mask |= 1 << lane
-    return mask
+async def _wait_for_dense_cluster_output(ptp, dut, layer_parameters, oep):
+    """Wait for an active cluster PSUM lane, after the configured delay."""
+    max_cycles = _max_wait_cycles()
+    for _ in range(max_cycles):
+        for cl_y in range(oep.Clusters_Y):
+            for cl_x in range(oep.Clusters_X):
+                mask = _dense_active_router_mask(
+                    layer_parameters, cl_x, cl_y, oep
+                )
+                cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+                try:
+                    enable = int(cluster.delay_cluster_enable_out.value)
+                except (TypeError, ValueError):
+                    continue
+                if enable & mask:
+                    return
+        await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+    raise TimeoutError(
+        "No active dense PSUM lane reached delay_cluster_data_out within "
+        f"{max_cycles} cycles{_fsm_state_note(dut)}"
+    )
 
 
 async def await_ready_signal(ptp, dut, settle_cycles=5000, max_wait_cycles=2000000,
@@ -3334,12 +3335,9 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
         tile_offset = tile * columns * rows * per_column
         output_count = 0
         cycles = math.ceil(per_column / oep.PARALLEL_MACS)
-        active_output_mask = _dense_active_output_mask(layer_parameters, oep)
         try:
-            await _wait_for_masked_signal(
-                ptp, dut.psum_enable_o, active_output_mask,
-                name="psum_enable_o", context=" before dense core output",
-                dut=dut,
+            await _wait_for_dense_cluster_output(
+                ptp, dut, layer_parameters, oep
             )
         except TimeoutError:
             def signal(name):
@@ -3411,7 +3409,6 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                      cl_x, cl_y, type(exc).__name__)
             raise
         for psum_pe in range(cycles):
-            enable_value = int(dut.psum_enable_o.value)
             if os.environ.get("TRACE_DENSE_OUTPUT", "0").lower() in {
                 "1", "true", "yes", "on"
             }:
@@ -3442,22 +3439,29 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                 )
             for cl_y in range(rows):
                 for cl_x in range(columns):
+                    cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+                    try:
+                        enable_value = int(
+                            cluster.delay_cluster_enable_out.value
+                        )
+                    except (TypeError, ValueError):
+                        enable_value = 0
                     for router in range(oep.NUM_GLB_PSUM):
                         if not layer_parameters.computing_mx[
                             cl_x][cl_y][0][router]:
                             continue
                         lane = ((cl_y * columns + cl_x) * oep.NUM_GLB_PSUM
                                 + router)
-                        if not (enable_value & (1 << lane)):
+                        if not (enable_value & (1 << router)):
                             continue
-                        lower = lane * oep.PSUM_Trans_Bitwidth
-                        raw_lane_data = dut.psum_data_o.value[
+                        lower = router * oep.PSUM_Trans_Bitwidth
+                        raw_lane_data = cluster.delay_cluster_data_out.value[
                             lower + oep.PSUM_Trans_Bitwidth - 1:lower
                         ]
                         if os.environ.get("TRACE_DENSE_OUTPUT", "0").lower() in {
                             "1", "true", "yes", "on"
                         }:
-                            cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+                            pe_x = router
                             pe = (cluster
                                   .pe_cluster.gen_X[pe_x].gen_Y[0].pe)
                             pe_router_data = cluster.pe_router_psum_data_out.value[
@@ -3832,11 +3836,8 @@ async def send_enable_dense(ptp, dut, layer_params, layer_repetition, oep):
     # WAIT_TO_SEND_PSUM. Keep the request asserted through computation and
     # release it after the output stream has begun, rather than pulsing it
     # immediately after compute_i where every PE can ignore it.
-    await _wait_for_masked_signal(
-        ptp, dut.psum_enable_o,
-        _dense_active_output_mask(layer_params, oep),
-        name="psum_enable_o", context=" while requesting dense output",
-        dut=dut,
+    await _wait_for_dense_cluster_output(
+        ptp, dut, layer_params, oep
     )
 
     # Wait cycles based on partial sums per PE (divided by 2 for dual outputs)
