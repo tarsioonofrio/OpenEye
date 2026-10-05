@@ -330,15 +330,6 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
                                                         (oep.Psum_Router_Bits * router + \
                                                             oep.Psum_Router_Bits * oep.NUM_GLB_PSUM * cl_x + \
                                                             oep.Psum_Router_Bits * oep.NUM_GLB_PSUM * oep.Clusters_X * cl_y))
-        if not hasattr(dut, "enable_dma_o"):
-            # The direct core testbench injects bias and collects results on
-            # the same GLB ports. Keep each local GLB<->PE PSUM route active;
-            # mapper modes may instead forward those words to another cluster.
-            router_mode_port = sum(
-                4 << (oep.Psum_Router_Bits * lane)
-                for lane in range(oep.Clusters_X * oep.Clusters_Y
-                                  * oep.NUM_GLB_PSUM)
-            )
         cocotb.start_soon(set_input(ptp,(dut.router_mode_psum_i), router_mode_port))
         router_mode_port = 0
 
@@ -3613,10 +3604,11 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                    str(raw_lane_data))
                             ) from exc
                         for mac in range(oep.PARALLEL_MACS):
+                            # Cluster rows reduce the FC K dimension; only the
+                            # configured output row emits the final result, so
+                            # the row coordinate does not advance the output.
                             index = (mac + oep.PARALLEL_MACS * psum_pe
-                                     + cl_x * per_column
-                                     + cl_y * per_column * columns
-                                     + tile_offset)
+                                     + cl_x * per_column + tile_offset)
                             shift = lower + oep.DATA_PSUM_BITWIDTH * (
                                 oep.PARALLEL_MACS - 1 - mac
                             )
@@ -3851,17 +3843,8 @@ async def send_enable_dense(ptp, dut, layer_params, layer_repetition, oep):
         Dense layers have simpler timing than convolution as they lack
         spatial dimensions and process vector-matrix multiplication.
     """
-    # The standalone OpenEye_Parallel testbench reads directly from the PE
-    # array. DenseMapper's mode 5 forwards GLB requests toward a neighboring
-    # cluster, so use the local bidirectional GLB<->PE mode while requesting
-    # and collecting these direct-core results.
-    router_mode_port = sum(
-        4 << (3 * lane)
-        for lane in range(oep.Clusters_X * oep.Clusters_Y * oep.NUM_GLB_PSUM)
-    )
-    cocotb.start_soon(set_input(ptp, dut.router_mode_psum_i, router_mode_port))
-    await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
-
+    # Keep DenseMapper's 5/2/3 cluster reduction route intact so the final
+    # cluster row emits accumulated FC results instead of every partial sum.
     # In PE.v, psum_enable_i sends an IDLE PE straight to SEND_PSUM. Wait for
     # the active PEs to finish their MAC loops before requesting the output.
     await _wait_for_dense_pes_ready(ptp, dut, layer_params, oep)
