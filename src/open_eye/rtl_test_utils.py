@@ -1622,17 +1622,36 @@ async def _wait_for_active_pes_ready(ptp, dut, layer_parameters, oep, layer_name
         if cycle + 1 < max_cycles:
             await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
 
+    top_signals = _signal_note(
+        dut,
+        ("compute_i", "compute_i_w", "compute_mask_i",
+         "compute_mask_i_reg", "compute_cluster_i_reg", "finished_cycles",
+         "needed_cycles_i_reg", "start_new_cycle", "psum_transmitted_i",
+         "iact_enable_i", "iact_ready_o"),
+    )
     raise TimeoutError(
         f"Active {layer_name} PEs did not reach WAIT_TO_SEND_PSUM within "
         f"{max_cycles} cycles; states: {' '.join(last_states)}"
-        f"; top: {_fsm_state_note(dut)}"
+        f"; top: {_fsm_state_note(dut)} {top_signals}"
         f"; PE gates: {_active_pe_gate_note(active_pes)}"
     )
 
 
+def _signal_note(handle, names):
+    values = []
+    for name in names:
+        try:
+            value = int(getattr(handle, name).value)
+        except Exception:
+            value = "?"
+        values.append(f"{name}={value}")
+    return " ".join(values)
+
+
 def _active_pe_gate_note(active_pes, limit=8):
     """Summarize PE start/data gates when an output wait times out."""
-    names = ("compute_i", "compute_pe", "data_set",
+    names = ("compute_i", "compute_pe", "data_set", "iact_select_i",
+             "iact_enable_i",
              "second_spad_words_iact", "second_spad_words_wght",
              "iact_ready_o", "wght_ready_o")
     details = []
