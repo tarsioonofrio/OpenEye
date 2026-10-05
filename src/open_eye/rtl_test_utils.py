@@ -3393,6 +3393,28 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                         raw_lane_data = dut.psum_data_o.value[
                             lower + oep.PSUM_Trans_Bitwidth - 1:lower
                         ]
+                        if os.environ.get("TRACE_DENSE_OUTPUT", "0").lower() in {
+                            "1", "true", "yes", "on"
+                        }:
+                            pe_x = oep.NUM_GLB_PSUM - router - 1
+                            pe = (dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+                                  .pe_cluster.gen_X[pe_x].gen_Y[0].pe)
+                            logger.info(
+                                "denseout cluster=(%d,%d) router=%d lane=%d "
+                                "enable=%s raw=%s PE(%d,0) state=%s select=%s "
+                                "addr=%s use_psum=%s spad_data=%s adder0=%s "
+                                "adder1=%s pe_output=%s",
+                                cl_x, cl_y, router, lane, enable_value,
+                                str(raw_lane_data), pe_x,
+                                str(pe.current_state_computing.value),
+                                str(pe.psum_select.value),
+                                str(pe.psum_spad_addr_r[0].value),
+                                str(pe.use_psum[0].value),
+                                str(pe.psum_spad_data_o[0].value),
+                                str(pe.adder_o_w[0].value),
+                                str(pe.adder_o_w[1].value),
+                                str(pe.psum_data_o.value),
+                            )
                         try:
                             lane_data = int(raw_lane_data)
                         except ValueError as exc:
