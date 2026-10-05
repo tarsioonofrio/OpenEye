@@ -2238,7 +2238,10 @@ async def trace_pe_wght_writes(ptp, dut, oep):
     cx, cy, col, row = (int(v) for v in parts[:4])
     t0, t1 = (parts[4], parts[5]) if len(parts) >= 6 else (0.0, 1e12)
     try:
-        pe = (dut.OpenEye_Parallel.gen_x[cx].gen_y[cy].OpenEye_Cluster
+        # Cocotb's ``dut`` is already the OpenEye_Parallel top in the
+        # single-layer tests. The FPGA wrapper has a nested instance with
+        # that name, but this helper is used by the direct-core testbench.
+        pe = (dut.gen_x[cx].gen_y[cy].OpenEye_Cluster
               .pe_cluster.gen_X[col].gen_Y[row].pe)
         ws = pe.weight_data_SPad
         isp = pe.iact_data_SPad
