@@ -3144,6 +3144,22 @@ async def trace_pe_calc_loop(ptp, dut, oep, cl_x=0, cl_y=0, pe_row=0, pe_col=0,
         logger.error("calc %s", " ".join("%s=%d" % (n, v)
                                          for n, v in zip(all_names, vals)))
         lines += 1
+    try:
+        handler = pe.wght_data_handler
+        pipeline_names = (
+            "filters_w", "overhead_reg", "overhead_new_calc_reg", "overhead_w",
+            "overhead_next_word", "next_channel_counter", "data_storage_1",
+            "temp_acc_overhead", "first_spad_addr_o", "first_spad_addr_delay",
+            "first_spad_data_o", "first_spad_data_delay", "first_spad_words_o",
+            "second_spad_addr_o", "second_spad_words_o", "enable_i",
+            "enable_delay", "compute_i",
+        )
+        logger.error("wght_pipeline %s", " ".join(
+            "%s=%s" % (name, str(getattr(handler, name).value))
+            for name in pipeline_names
+        ))
+    except Exception as exc:
+        logger.error("wght_pipeline state unavailable (%s)", type(exc).__name__)
 
 
 def dump_pe_iact_config(dut, oep, pe_col=0):
