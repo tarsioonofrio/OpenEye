@@ -157,6 +157,11 @@ class DRAMContents(object):
             elif "Dense" in str(layer_parameters[i].layer_name):
                 # Dense output: 1D vector [features]
                 dram_fmap.append([0 for l in range(layer_parameters[i].filters)])
+            elif "Pooling" in str(layer_parameters[i].layer_name):
+                # Pooling output: 3D tensor [channels][height][width]
+                dram_fmap.append([[[0 for _ in range(layer_parameters[i].output_shape[2])]
+                                   for _ in range(layer_parameters[i].output_shape[1])]
+                                  for _ in range(layer_parameters[i].output_shape[3])])
 
         # Assign initialized structures to instance attributes
         self.fmap = dram_fmap

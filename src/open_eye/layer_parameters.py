@@ -1755,11 +1755,18 @@ class LayerParameters(object):
                                         for _ in range(params.Clusters_Y)]
                                         for _ in range(params.Clusters_X)]
         self.diff_iact_layer = self.input_shape[3]
-        if ((layer_parameters[max_layers - layer_number - 2].layer_name == "Dense") & (self.pooling_mode == 0)):
+        adjacent_index = max_layers - layer_number - 2
+        adjacent_layer = (layer_parameters[adjacent_index]
+                          if 0 <= adjacent_index < len(layer_parameters)
+                          else None)
+        if (getattr(adjacent_layer, "layer_name", None) == "Dense"
+                and self.pooling_mode == 0):
             self.used_channels = 1
         else:
             self.used_channels = 4
-        self.diff_iact_layer_next_layer = layer_parameters[max_layers - layer_number - 2].used_channels
+        self.diff_iact_layer_next_layer = getattr(
+            adjacent_layer, "used_channels", self.used_channels
+        )
         if (self.pooling_mode == 0):
             self.iact_converter_buffer_addr_max_cycles = math.ceil((((self.iact_size_y*self.diff_iact_layer))/(self.strideY*4)))
         else:

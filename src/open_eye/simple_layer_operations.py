@@ -36,27 +36,25 @@ def pool(dram, layer, layer_number):
     layer_number + 1 index. For average pooling, results are integer-divided
     by the pooling window area.
     """
-    temp_number = 0
+    input_fmap = dram.fmap[layer_number]
+    output_fmap = dram.fmap[layer_number + 1]
+    window_h, window_w = layer.pool_size
+    stride_h, stride_w = layer.strides
 
-    if "Average" in str(layer):
-        for oc in range(layer.output.shape[3]):
-            for ox in range(layer.output.shape[2]):
-                for oy in range(layer.output.shape[1]):
-                    for ix in range(layer.strides[1]):
-                        for iy in range(layer.strides[0]):
-                            temp_number = temp_number + dram.fmap[layer_number][oc][ix][iy]
-                    dram.fmap[layer_number + 1][oc][ox][oy] = int(temp_number/ (layer.strides[0]*layer.strides[1]))
-
-    elif "Max" in str(layer):
-        for oc in range(layer.output.shape[3]):
-            for ox in range(layer.output.shape[2]):
-                for oy in range(layer.output.shape[1]):
-                    for ix in range(layer.strides[1]):
-                        for iy in range(layer.strides[0]):
-                            if(dram.fmap[layer_number][oc][ix][iy] > temp_number):
-                                temp_number = dram.fmap[layer_number][oc][ix][iy]
-
-                    dram.fmap[layer_number + 1][oc][ox][oy] = temp_number
+    for channel in range(layer.output.shape[3]):
+        for out_y in range(layer.output.shape[1]):
+            for out_x in range(layer.output.shape[2]):
+                values = [
+                    input_fmap[channel][out_y * stride_h + kernel_y]
+                    [out_x * stride_w + kernel_x]
+                    for kernel_y in range(window_h)
+                    for kernel_x in range(window_w)
+                ]
+                if "Max" in layer.__class__.__name__:
+                    result = max(values)
+                else:
+                    result = int(sum(values) / len(values))
+                output_fmap[channel][out_y][out_x] = result
         
 
 def flat(dram, layer, layer_number):
@@ -117,4 +115,3 @@ def batchnorm_output(layer_parameters, divide_value, layer_number, dram):
     except:
         for f in range(len(dram.fmap[1 + layer_number])):
             dram.fmap[1 + layer_number][f] = math.floor(dram.fmap[1 + layer_number][f]/(2**layer_parameters.quantize[0][1]))
-

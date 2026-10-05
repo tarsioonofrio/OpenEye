@@ -97,6 +97,16 @@ def create_layer(layer_mode, filters, kernelsize_x, kernelsize_y, inputsize_x, i
             model.add(tf.keras.layers.Conv2D(filters, (kernelsize_x, kernelsize_y), padding="same", input_shape=(math.ceil(inputsize_x/4), math.ceil(inputsize_y/4), filters), strides = strides))
         case "Depthwise_Convolution":
             model.add(tf.keras.layers.DepthwiseConv2D((kernelsize_x, kernelsize_y), padding="same", input_shape=(inputsize_x, inputsize_y, channels), strides = strides))
+        case "Pooling":
+            # Standalone pooling workload used by test_single_layers. Keep the
+            # requested window and stride so the software reference covers the
+            # same input/output shapes as a single pooling layer.
+            model.add(tf.keras.layers.MaxPooling2D(
+                pool_size=(kernelsize_x, kernelsize_y),
+                strides=strides,
+                padding="valid",
+                input_shape=(inputsize_x, inputsize_y, channels),
+            ))
         case "GEMM":
             # Pure matrix multiplication C = A x B (+ bias), realized as a single
             # Dense layer. Combined with DATAFLOW="output_stationary" (or the
