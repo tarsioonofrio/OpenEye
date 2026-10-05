@@ -678,7 +678,6 @@ module PE #(
   reg                                    iact_pass_enable_reg;   // Registered enable to forward
 
   // Output formatting
-  wire [        DATA_PSUM_BITWIDTH-1:0] output_adder;          // Combined output from both adders
 
   // ============================================================================
   // FST Waveform Dump Configuration (for CocoTB simulation)
@@ -818,8 +817,18 @@ module PE #(
   end
 
   // Output mux: SERIAL mode outputs single psum, parallel mode outputs combined
-  assign psum_data_o = SERIAL == 1 ? {{(TRANS_BITWIDTH_PSUM-DATA_PSUM_BITWIDTH){1'd0}}, adder_tree_o} : output_adder[TRANS_BITWIDTH_PSUM-1:0];
-  assign output_adder = adder_o_w[0];
+  // Serial mode emits the adder-tree result. Parallel mode packs MAC 0 into
+  // the most significant lane, matching the stream mapper's lane ordering.
+  generate
+    if (SERIAL == 1) begin : gen_serial_psum_output
+      assign psum_data_o = adder_tree_o;
+    end else begin : gen_parallel_psum_output
+      for (pmc = 0; pmc < PARALLEL_MACS; pmc=pmc+1) begin : pack_mac_lanes
+        assign psum_data_o[(PARALLEL_MACS-1-pmc)*DATA_PSUM_BITWIDTH +: DATA_PSUM_BITWIDTH]
+            = adder_o_w[pmc];
+      end
+    end
+  endgenerate
 
   // Weight address generation:
   // SPARSITY_EN=1: use vector or compute from iact overhead (for zero-skipping)
