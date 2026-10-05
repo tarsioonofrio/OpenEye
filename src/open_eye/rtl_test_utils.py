@@ -3379,7 +3379,7 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                                str(pe.adder_o_w[0].value),
                                                str(pe.computing.value))
                                         )
-                                        if pe_x == 0 and pe_y == 0:
+                                        if pe_x == router and pe_y == 0:
                                             names = (
                                                 "values_valid", "raw_wght_w",
                                                 "second_spad_words_iact",
@@ -3387,6 +3387,7 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                                 "iact_data_current_3", "mult_fac_1",
                                                 "mult_fac_2", "mult_o_w",
                                                 "adder_summand_1", "adder_summand_2",
+                                                "psum_spad_data_o", "used_psum_memory",
                                                 "psum_data_SPad_en_r", "psum_data_SPad_en_w",
                                                 "psum_spad_addr_r", "psum_spad_addr_w",
                                             )
@@ -3397,6 +3398,7 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                                     if name in {
                                                         "mult_fac_1", "mult_fac_2", "mult_o_w",
                                                         "adder_summand_1", "adder_summand_2",
+                                                        "psum_spad_data_o", "used_psum_memory",
                                                         "psum_data_SPad_en_r", "psum_data_SPad_en_w",
                                                         "psum_spad_addr_r", "psum_spad_addr_w",
                                                     }:
@@ -3421,6 +3423,16 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                                     )
                                                 except Exception:
                                                     pass
+                                            try:
+                                                memory = pe.gen_parallel_spad.psum_SPad.ram.impl.mem
+                                                signals.append(
+                                                    "psum_spad=%s" % [
+                                                        str(memory[i].value)
+                                                        for i in range(min(16, len(memory)))
+                                                    ]
+                                                )
+                                            except Exception:
+                                                pass
                                             detail += " details=" + " ".join(signals)
                                         pe_states.append(detail)
                             except Exception as diag_exc:
