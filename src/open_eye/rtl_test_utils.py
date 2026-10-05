@@ -3410,7 +3410,11 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                                str(pe.adder_o_w[0].value),
                                                str(pe.computing.value))
                                         )
-                                        if pe_x == router and pe_y == 0:
+                                        # Dense FC maps PE x=0 to the last
+                                        # PSUM router; computing_mx is indexed
+                                        # in PE order while the bus is reversed.
+                                        if (pe_x == (oep.NUM_GLB_PSUM - router - 1)
+                                                and pe_y == 0):
                                             names = (
                                                 "values_valid", "raw_wght_w",
                                                 "second_spad_words_iact",
@@ -3420,6 +3424,7 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                                 "adder_summand_1", "adder_summand_2",
                                                 "psum_spad_data_o", "used_psum_memory",
                                                 "psum_data_SPad_en_r", "psum_data_SPad_en_w",
+                                                "psum_data_SPad_en_w_i",
                                                 "psum_spad_addr_r", "psum_spad_addr_w",
                                             )
                                             signals = []
@@ -3431,6 +3436,7 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                                         "adder_summand_1", "adder_summand_2",
                                                         "psum_spad_data_o", "used_psum_memory",
                                                         "psum_data_SPad_en_r", "psum_data_SPad_en_w",
+                                                        "psum_data_SPad_en_w_i",
                                                         "psum_spad_addr_r", "psum_spad_addr_w",
                                                     }:
                                                         value = [str(value[i].value)
