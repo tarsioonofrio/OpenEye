@@ -106,6 +106,13 @@ module OpenEye_FPGA_gemm_workload_tb;
                  dut.psum_pipeline_inst.psum_enable_i_reg,
                  dut.psum_choose_i_reg,
                  dut.psum_pipeline_inst.router_mode_psum);
+        $display("selected cluster(0,1): router_ready=%h router_enable=%h PE ready_o=%b ready_i=%b select=%b state=%0d",
+                 dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_router_psum_ready_out,
+                 dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_router_psum_enable_in,
+                 dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.psum_ready_o,
+                 dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.psum_ready_i,
+                 dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.psum_select,
+                 dut.OpenEye_Parallel.gen_x[0].gen_y[1].OpenEye_Cluster.pe_cluster.gen_X[0].gen_Y[0].pe.current_state_computing);
         $fatal(1, "GEMM row %0d output count %0d, expected %0d",
                row_index, output_index, `GEMM_OUTPUT_COUNT);
       end
