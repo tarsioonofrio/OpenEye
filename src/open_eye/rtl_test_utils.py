@@ -3082,27 +3082,36 @@ async def trace_psum_capture_slices(ptp, dut, oep, max_lines=40):
     while lines < max_lines:
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
         try:
-            enable = int(dut.psum_enable_o.value)
-            # GET_BIAS also drives psum_buffer_en_w (to ~0) with no results on
-            # the bus, which swamps the log. Only the result-capture phase has
-            # psum_enable_o non-zero, so key on that instead.
-            if not enable:
-                continue
-            en = int(dut.psum_buffer_en_w.value)
-            data = int(dut.psum_data_o_w.value)
             state = int(dut.fsm_psum_current_state.value)
         except Exception:
             continue
-        parts = []
+        # Other lanes may be X while one routed lane is valid. Slice each
+        # cluster before inspecting it, as the convolution collector does.
         for cr in range(oep.Clusters_Y):
             for cc in range(oep.Clusters_X):
                 base = (cc * oep.NUM_GLB_PSUM
                         + cr * oep.Clusters_X * oep.NUM_GLB_PSUM)
-                val = _signed((data >> (base * width)) & ((1 << tp) - 1), tp)
-                parts.append("c(%d,%d)=%d" % (cc, cr, val))
-        logger.error("capture psum_state=%d en_w=0x%x psum_enable_o=0x%x %s",
-                     state, en, enable, " ".join(parts))
-        lines += 1
+                try:
+                    enable = str(dut.psum_enable_o.value[
+                        base + oep.NUM_GLB_PSUM - 1:base
+                    ])
+                    if "1" not in enable:
+                        continue
+                    data_lo = base * width
+                    data = str(dut.psum_data_o_w.value[
+                        data_lo + oep.NUM_GLB_PSUM * width - 1:data_lo
+                    ])
+                    buffer_enable = str(dut.psum_buffer_en_w.value)
+                except Exception:
+                    continue
+                logger.error(
+                    "capture psum_state=%d cluster=(%d,%d) enable=%s "
+                    "buffer_en=%s data=%s",
+                    state, cc, cr, enable, buffer_enable, data,
+                )
+                lines += 1
+                if lines >= max_lines:
+                    return
 
 
 async def trace_pe_calc_loop(ptp, dut, oep, cl_x=0, cl_y=0, pe_row=0, pe_col=0,
