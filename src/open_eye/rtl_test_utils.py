@@ -355,6 +355,18 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
 
         # Set router mode for partial sums
         router_mode_port = 0
+        # A direct OpenEye_Parallel test with the serial GLB bypass has no
+        # partial-sum memory to relay mode-5 data into the vertical chain.
+        # Route dense PE partial sums into the first cluster link directly.
+        if (not hasattr(dut, "enable_dma_o")
+                and any(name in str(lp.layer_name).upper()
+                        for name in ("FC", "DENSE"))):
+            psum_router_config = stream[strdic.stream_parallel_dict["status"]][strdic.status_dict["router_psum"]]
+            for cl_x in range(oep.Clusters_X):
+                for cl_y in range(oep.Clusters_Y):
+                    for router in range(oep.NUM_GLB_PSUM):
+                        if psum_router_config[cl_x][cl_y][router] == 5:
+                            psum_router_config[cl_x][cl_y][router] = 1
         for cl_x in range(oep.Clusters_X):
             for cl_y in range(oep.Clusters_Y):
                 for router in range(oep.NUM_GLB_PSUM):
