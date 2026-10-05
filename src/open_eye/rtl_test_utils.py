@@ -3718,6 +3718,32 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                     except Exception as exc:
                         logger.error("Dense core cluster(%d,%d) state unreadable: %s",
                                      cl_x, cl_y, type(exc).__name__)
+            for cl_y in sorted({0, rows - 1}):
+                for cl_x in range(columns):
+                    try:
+                        cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+                        route_fields = {}
+                        for name in (
+                            "router_mode_psum_i", "pe_router_psum_enable_out",
+                            "pe_router_psum_ready_in", "delay_cluster_enable_in",
+                            "delay_cluster_enable_out", "delay_cluster_ready_out",
+                            "delay_psum_glb_i", "delay_cluster_data_in",
+                            "delay_cluster_data_out", "glb_cluster_psum_enable_w",
+                            "glb_cluster_psum_ready_w",
+                        ):
+                            try:
+                                route_fields[name] = str(getattr(cluster, name).value)
+                            except Exception:
+                                route_fields[name] = "?"
+                        logger.error(
+                            "Dense core PSUM path cluster(%d,%d): %s",
+                            cl_x, cl_y,
+                            " ".join(f"{name}={value}"
+                                     for name, value in route_fields.items()),
+                        )
+                    except Exception as exc:
+                        logger.error("Dense core PSUM path cluster(%d,%d) unreadable: %s",
+                                     cl_x, cl_y, type(exc).__name__)
             raise
         for psum_pe in range(cycles):
             if os.environ.get("TRACE_DENSE_OUTPUT", "0").lower() in {
