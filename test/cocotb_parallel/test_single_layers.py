@@ -60,7 +60,9 @@ USE_SPARSE_IACTS, USE_SPARSE_WGHTS, USE_RANDOM_VALUES, LOGGER_LEVEL, CLUSTER_ROW
         toplevel=toplevel,
         module=module,
         sim_build=target_dir,
-        parameters={"CLUSTER_ROWS": CLUSTER_ROWS, "SERIAL": 1,
+        # OpenEye_Parallel_tb builds OpenEyeParameters with serial=False and
+        # generates the layer streams in the parallel direct-port format.
+        parameters={"CLUSTER_ROWS": CLUSTER_ROWS, "SERIAL": 0,
                     "PE_SERIAL": 0, "IACT_DATA_WORDS": 1024},
         testcase='single_layer_test',
         force_compile=True,
@@ -110,7 +112,7 @@ def test_single_pool_layer(STRIDE,KERNEL_SIZE_X,KERNEL_SIZE_Y,INPUT_SIZE,INPUT_C
         toplevel=toplevel,
         module=module,
         sim_build=target_dir,
-        parameters={"SERIAL": 1, "PE_SERIAL": 0},
+        parameters={"SERIAL": 0, "PE_SERIAL": 0},
         testcase='single_layer_test',
         force_compile=True,
         #waves=True,
@@ -154,7 +156,7 @@ def test_depthwise_conv_layer(STRIDE,KERNEL_SIZE_X,KERNEL_SIZE_Y,INPUT_SIZE,INPU
         toplevel=toplevel,
         module=module,
         sim_build=target_dir,
-        parameters={"SERIAL": 1, "PE_SERIAL": 0, "IACT_DATA_WORDS": 1024},
+        parameters={"SERIAL": 0, "PE_SERIAL": 0, "IACT_DATA_WORDS": 1024},
         testcase='single_layer_test',
         force_compile=True,
         #waves=True,
@@ -197,7 +199,7 @@ def test_fc_layer(INPUT_SIZE, OUTPUT_SIZE, tmp_path):
         module=module,
         sim_build=target_dir,
         parameters={
-            "SERIAL": 1,
+            "SERIAL": 0,
             "PE_SERIAL": 0,
             "IACT_DATA_WORDS": 1024,
             "SPARSITY_EN": 0,
