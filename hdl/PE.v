@@ -566,6 +566,7 @@ module PE #(
   wire [    DATA_WGHT_IGNORE_ZEROS-1:0] wght_data_spad_oh_acc [PARALLEL_MACS-1 : 0];   // Weight sparsity info MAC
   // Partial sum scratch pad control signals
   reg                                   psum_data_SPad_en_r [PARALLEL_MACS-1 : 0];  // Read enable
+  wire                                  psum_data_SPad_en_r_i [PARALLEL_MACS-1 : 0]; // Read enable after hazard gating
   reg                                   psum_data_SPad_en_w [PARALLEL_MACS-1 : 0];  // Write enable
 
   // Partial sum data path control
@@ -893,6 +894,19 @@ module PE #(
       assign psum_data_SPad_en_w_i[pmc] = !psum_data_SPad_en_w[pmc] ? 0 :
                                           !psum_data_SPad_en_r[pmc] ? 1 :
                                           (psum_spad_addr_w[pmc] != psum_spad_addr_r[pmc]) ?  1 : 0;
+      if ((SERIAL == 0) && (PARALLEL_MACS == 2)) begin : gen_parallel_psum_read_hazard
+        // The parallel PSUM SPAD uses one true dual-port RAM for both MACs.
+        // When the other lane writes the address being read, use the PE's
+        // forwarding path instead of asking the RAM for undefined read-during-
+        // write data. Keep the write enabled so the newest PSUM is committed.
+        assign psum_data_SPad_en_r_i[pmc] =
+            (psum_data_SPad_en_r[pmc] || psum_enable_i) &&
+            !((psum_data_SPad_en_w_i[1-pmc]) &&
+              (psum_spad_addr_r[pmc] == psum_spad_addr_w[1-pmc]) &&
+              (reuse_psum_spad[pmc] || reuse_adder_data[pmc][1-pmc]));
+      end else begin : gen_default_psum_read_enable
+        assign psum_data_SPad_en_r_i[pmc] = psum_data_SPad_en_r[pmc] || psum_enable_i;
+      end
     end
   endgenerate
 
@@ -2154,8 +2168,8 @@ module PE #(
         .ADDR_WIDTH(PSUM_ADDR_BITWIDTH)
     ) psum_SPad (
         .clk_i     (clk_i),
-        .re_a_i    (psum_data_SPad_en_r[0] || psum_enable_i),
-        .re_b_i    (psum_data_SPad_en_r[1] || psum_enable_i),
+        .re_a_i    (psum_data_SPad_en_r_i[0]),
+        .re_b_i    (psum_data_SPad_en_r_i[1]),
         .we_a_i    (psum_data_SPad_en_w_i[0]),
         .we_b_i    (psum_data_SPad_en_w_i[1]),
         .addr_r_a_i(psum_spad_addr_r[0]),
