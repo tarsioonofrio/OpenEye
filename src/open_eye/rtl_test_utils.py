@@ -3350,7 +3350,9 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                         if not (enable_value & (1 << lane)):
                             continue
                         lower = lane * oep.PSUM_Trans_Bitwidth
-                        data = int(dut.psum_data_o.value)
+                        lane_data = int(dut.psum_data_o.value[
+                            lower + oep.PSUM_Trans_Bitwidth - 1:lower
+                        ])
                         for mac in range(oep.PARALLEL_MACS):
                             index = (mac + oep.PARALLEL_MACS * psum_pe
                                      + cl_x * per_column
@@ -3360,7 +3362,8 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                 oep.PARALLEL_MACS - 1 - mac
                             )
                             value = _signed(
-                                (data >> shift) & ((1 << oep.DATA_PSUM_BITWIDTH) - 1),
+                                (lane_data >> (shift - lower))
+                                & ((1 << oep.DATA_PSUM_BITWIDTH) - 1),
                                 oep.DATA_PSUM_BITWIDTH,
                             )
                             if index < len(dram.fmap[layer_number + 1]):
