@@ -201,6 +201,28 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
         layer parameters.
     
     """
+    # The direct OpenEye_Parallel testbench bypasses the FPGA's
+    # iact_stream_constructor, which normally selects a separate GLB bank
+    # for each vertical PE row. DenseIactStreamMapper places consecutive
+    # K slices in banks 0..PEs_Y-1 within each cluster row, so leave every
+    # Dense PE pointed at its matching bank instead of the reset default
+    # (bank 0 for all PEs). This applies to both parallel status programming
+    # and SERIAL DMA testbenches; the selector is a direct core input.
+    if (hasattr(dut, "iact_choose_i")
+            and "DENSE" in str(lp.layer_name).upper()
+            and oep.NUM_GLB_IACT >= oep.PEs_Y):
+        selector_bits = max(1, oep.NUM_GLB_IACT.bit_length())
+        iact_choose = 0
+        for cl_x in range(oep.Clusters_X):
+            for cl_y in range(oep.Clusters_Y):
+                for pe_y in range(oep.PEs_Y):
+                    for pe_x in range(oep.PEs_X):
+                        pe_index = (cl_x * oep.Clusters_Y * oep.PEs
+                                    + cl_y * oep.PEs
+                                    + pe_y * oep.PEs_X + pe_x)
+                        iact_choose |= pe_y << (pe_index * selector_bits)
+        cocotb.start_soon(set_input(ptp, dut.iact_choose_i, iact_choose))
+
     if (oep.SERIAL == 0):
         # Parallel mode: configure all status registers and router modes
 
@@ -342,27 +364,6 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
                                                             oep.Psum_Router_Bits * oep.NUM_GLB_PSUM * oep.Clusters_X * cl_y))
         cocotb.start_soon(set_input(ptp,(dut.router_mode_psum_i), router_mode_port))
         router_mode_port = 0
-
-        # The direct OpenEye_Parallel testbench bypasses the FPGA's
-        # iact_stream_constructor, which normally selects a separate GLB bank
-        # for each vertical PE row. DenseIactStreamMapper places consecutive
-        # K slices in banks 0..PEs_Y-1 within each cluster row, so leave every
-        # Dense PE pointed at its matching bank instead of the reset default
-        # (bank 0 for all PEs).
-        if (hasattr(dut, "iact_choose_i")
-                and "DENSE" in str(lp.layer_name).upper()
-                and oep.NUM_GLB_IACT >= oep.PEs_Y):
-            selector_bits = max(1, oep.NUM_GLB_IACT.bit_length())
-            iact_choose = 0
-            for cl_x in range(oep.Clusters_X):
-                for cl_y in range(oep.Clusters_Y):
-                    for pe_y in range(oep.PEs_Y):
-                        for pe_x in range(oep.PEs_X):
-                            pe_index = (cl_x * oep.Clusters_Y * oep.PEs
-                                        + cl_y * oep.PEs
-                                        + pe_y * oep.PEs_X + pe_x)
-                            iact_choose |= pe_y << (pe_index * selector_bits)
-            cocotb.start_soon(set_input(ptp, dut.iact_choose_i, iact_choose))
 
         # Wait for configuration to propagate
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
