@@ -250,6 +250,10 @@ async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, la
     if(stream[layer_repetition][strdic.stream_parallel_dict["status"]][strdic.status_dict["skipPsum"]] != 1):
         await psum_thread
     logger.info("Stream is sent.")
+    if os.environ.get("OPENEYE_TRACE_IACT_HANDSHAKE", "0").lower() in {
+        "1", "true", "yes", "on"
+    }:
+        rtl_test_utils.trace_active_pe_input_counts(dut, lp, oep)
     # OpenEye_Parallel waits for the external PSUM controller to announce that
     # the bias/partial-sum transfer is complete before advancing a compute
     # cycle. The FPGA wrapper normally drives this from psum_pipeline; this

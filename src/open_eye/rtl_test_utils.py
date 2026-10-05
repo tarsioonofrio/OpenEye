@@ -1699,6 +1699,29 @@ def _active_pe_gate_note(active_pes, limit=8):
     return " ".join(details)
 
 
+def trace_active_pe_input_counts(dut, layer_parameters, oep):
+    """Log active PE input counters after loading and before compute starts."""
+    for cl_y in range(oep.Clusters_Y):
+        for cl_x in range(oep.Clusters_X):
+            for pe_x in range(oep.NUM_GLB_PSUM):
+                if not layer_parameters.computing_mx[cl_x][cl_y][0][pe_x]:
+                    continue
+                try:
+                    pe = (dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+                          .pe_cluster.gen_X[pe_x].gen_Y[0].pe)
+                    values = _signal_note(
+                        pe,
+                        ("current_state_computing", "data_set",
+                         "second_spad_words_iact", "second_spad_words_wght",
+                         "first_spad_words_iact_S", "compute_i"),
+                    )
+                    logger.info("PE input counters before compute (%d,%d,pe%d): %s",
+                                cl_x, cl_y, pe_x, values)
+                except Exception as exc:
+                    logger.info("PE input counters before compute (%d,%d,pe%d): %s",
+                                cl_x, cl_y, pe_x, type(exc).__name__)
+
+
 async def _wait_for_dense_pes_ready(ptp, dut, layer_parameters, oep):
     """Wait until every active dense PE is ready to stream its PSUMs."""
     await _wait_for_active_pes_ready(ptp, dut, layer_parameters, oep, "dense")
