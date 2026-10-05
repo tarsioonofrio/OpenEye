@@ -295,6 +295,15 @@ async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, la
             ptp, dut, layer_number, layer_repetition, lp,
             oep, layer_es, dram, log_level
         )
+    if os.environ.get("OPENEYE_TRACE_IACT_HANDSHAKE", "0").lower() in {
+        "1", "true", "yes", "on"
+    }:
+        # The direct-core layer can finish with incorrect values without a
+        # PE stall. Report the selected lane and accepted traffic for every
+        # PE row here as well as on timeout, so a clean completion still
+        # exposes activation routing errors.
+        rtl_test_utils.report_iact_handoff(oep)
+        rtl_test_utils.report_pe_iact()
     cocotb.start_soon(rtl_test_utils.set_input(ptp, dut.psum_ready_i, 0))
     if hasattr(dut, "psum_transmitted_i"):
         cocotb.start_soon(rtl_test_utils.set_input(
