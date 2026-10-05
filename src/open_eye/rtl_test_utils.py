@@ -823,7 +823,8 @@ async def monitor_pe_iact(ptp, dut, oep, pe_col=0):
         for cy in range(oep.Clusters_Y):
             for row in range(oep.PEs_Y):
                 try:
-                    pe = (dut.OpenEye_Parallel.gen_x[cx].gen_y[cy].OpenEye_Cluster
+                    root = getattr(dut, "OpenEye_Parallel", dut)
+                    pe = (root.gen_x[cx].gen_y[cy].OpenEye_Cluster
                           .pe_cluster.gen_X[pe_col].gen_Y[row].pe)
                 except Exception:
                     continue
@@ -912,13 +913,20 @@ async def monitor_iact_handoff(ptp, dut):
         except Exception:
             return None
 
+    def read_first(*names):
+        for name in names:
+            value = read(name)
+            if value is not None:
+                return value
+        return None
+
     while True:
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
         iact_handoff_counts["cycles"] += 1
-        en = read("iact_enable_i_oep_w")
+        en = read_first("iact_enable_i_oep_w", "iact_enable_i")
         if not en:
             continue
-        rdy = read("iact_ready_o_oep_w") or 0
+        rdy = read_first("iact_ready_o_oep_w", "iact_ready_o") or 0
         bit = 0
         while en >> bit:
             if (en >> bit) & 1:
@@ -926,7 +934,7 @@ async def monitor_iact_handoff(ptp, dut):
                 if (rdy >> bit) & 1:
                     iact_handoff_counts["handshake"][bit] = iact_handoff_counts["handshake"].get(bit, 0) + 1
             bit += 1
-        ch = read("iact_choose_i_oep_w")
+        ch = read_first("iact_choose_i_oep_w", "iact_choose_i")
         if ch is not None:
             key = (hex(ch), hex(en))
             if key in iact_handoff_counts["choose"] or len(iact_handoff_counts["choose"]) < 32:
@@ -1629,6 +1637,11 @@ async def _wait_for_active_pes_ready(ptp, dut, layer_parameters, oep, layer_name
          "needed_cycles_i_reg", "start_new_cycle", "psum_transmitted_i",
          "iact_enable_i", "iact_ready_o"),
     )
+    if os.environ.get("OPENEYE_TRACE_IACT_HANDSHAKE", "0").lower() in {
+        "1", "true", "yes", "on"
+    }:
+        report_iact_handoff(oep)
+        report_pe_iact()
     raise TimeoutError(
         f"Active {layer_name} PEs did not reach WAIT_TO_SEND_PSUM within "
         f"{max_cycles} cycles; states: {' '.join(last_states)}"
