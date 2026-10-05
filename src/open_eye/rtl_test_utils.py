@@ -2817,6 +2817,49 @@ async def trace_pe_pass_counts(ptp, dut, oep, max_lines=200000):
         logger.info("passcount c(%d,%d) col=%d row=%d passes=%d", cx, cy, c, r, counts[key])
 
 
+async def trace_compute_schedule(ptp, dut, oep, max_lines=2000):
+    """Trace top-level compute-cycle handshakes and PE states (opt-in)."""
+    def value(signal):
+        try:
+            return int(signal.value)
+        except Exception:
+            return None
+
+    pe_handles = {}
+    for cx in range(oep.Clusters_X):
+        for cy in range(oep.Clusters_Y):
+            try:
+                cluster = dut.gen_x[cx].gen_y[cy].OpenEye_Cluster.pe_cluster
+                for col in range(oep.PEs_X):
+                    for row in range(oep.PEs_Y):
+                        pe_handles[(cx, cy, col, row)] = (
+                            cluster.gen_X[col].gen_Y[row].pe
+                        )
+            except Exception as exc:
+                logger.error("compute trace: PE hierarchy unavailable (%s)",
+                             type(exc).__name__)
+                return
+
+    previous = None
+    for _ in range(max_lines):
+        await FallingEdge(dut.clk_i)
+        now = cocotb.utils.get_sim_time("ns")
+        top = tuple(value(getattr(dut, name)) for name in (
+            "fsm_current_state", "finished_cycles", "needed_cycles_i_reg",
+            "compute_cluster_i_reg", "compute_mask_reg", "start_new_cycle",
+            "psum_transmitted_i", "iact_enable_i", "wght_enable_i",
+        ))
+        pe_states = tuple(value(pe.current_state_computing)
+                          for pe in pe_handles.values())
+        snapshot = (top, pe_states)
+        if snapshot != previous:
+            logger.info("compute schedule t=%s top=%s pe_states=%s",
+                        now, top, pe_states)
+            previous = snapshot
+        if top[0] == 0 and top[1] == top[2] and top[1] != 0:
+            return
+
+
 async def trace_pooling(ptp, dut, max_lines=400):
     """Trace the max-pooling FSM (opt-in: TRACE_POOLING=1 or TRACE_POOLING=t0,t1).
 

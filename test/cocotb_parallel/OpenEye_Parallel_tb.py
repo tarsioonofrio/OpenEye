@@ -190,6 +190,12 @@ async def single_layer_test(dut):
         cocotb.start_soon(rtl_test_utils.trace_pe_wght_writes(
             ptp, dut, openeye_parameter
         ))
+    if os.environ.get("OPENEYE_TRACE_COMPUTE_SCHEDULE", "0").lower() in {
+        "1", "true", "yes", "on"
+    }:
+        cocotb.start_soon(rtl_test_utils.trace_compute_schedule(
+            ptp, dut, openeye_parameter
+        ))
 
     # Process the layers of the model one after another
     for layer_number, layer in enumerate(model.layers):
