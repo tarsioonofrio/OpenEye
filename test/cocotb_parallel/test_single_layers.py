@@ -153,7 +153,13 @@ def test_depthwise_conv_layer(STRIDE,KERNEL_SIZE_X,KERNEL_SIZE_Y,INPUT_SIZE,INPU
         toplevel=toplevel,
         module=module,
         sim_build=target_dir,
-        parameters={"SERIAL": 1, "PE_SERIAL": 0},
+        parameters={
+            "SERIAL": 1,
+            "PE_SERIAL": 0,
+            "SPARSITY_EN": 0,
+            "TRANS_BITWIDTH_IACT": 16,
+            "TRANS_BITWIDTH_WGHT": 16,
+        },
         testcase='single_layer_test',
         force_compile=True,
         #waves=True,
@@ -208,7 +214,10 @@ def test_fc_layer(INPUT_SIZE, OUTPUT_SIZE, tmp_path):
                     ,"CLOCK_DELAY_UNIT_OUTPUT" : clk_delay_unit_out
                     ,"LAYER" : layer
                     ,"INPUT_SIZE" : str(INPUT_SIZE)
-                    ,"OUTPUT_SIZE" : str(OUTPUT_SIZE)}
+                    ,"OUTPUT_SIZE" : str(OUTPUT_SIZE)
+                    ,"SPARSITY_EN" : "0"
+                    ,"TRANS_BITWIDTH_IACT" : "16"
+                    ,"TRANS_BITWIDTH_WGHT" : "16"}
     )
 
 
