@@ -4292,23 +4292,11 @@ async def send_enable_dense(ptp, dut, layer_params, layer_repetition, oep):
         Dense layers have simpler timing than convolution as they lack
         spatial dimensions and process vector-matrix multiplication.
     """
-    # Keep DenseMapper's 1/6/3 cluster reduction route intact so the final
+    # Keep DenseMapper's 5/2/3 cluster reduction route intact so the final
     # cluster row emits accumulated FC results instead of every partial sum.
     # In PE.v, psum_enable_i sends an IDLE PE straight to SEND_PSUM. Wait for
     # the active PEs to finish their MAC loops before requesting the output.
     await _wait_for_dense_pes_ready(ptp, dut, layer_params, oep)
-    # During MAC execution, the Dense rows above the first select router
-    # PSUMs as their PE input. For output collection, restore the final-row
-    # selection used by the core's PE-to-GLB route so psum_enable_i reaches
-    # the result PEs.
-    psum_router_mask = 0
-    for cl_x in range(oep.Clusters_X):
-        for router in range(oep.NUM_GLB_PSUM):
-            bit = ((oep.Clusters_Y - 1) * oep.Clusters_X
-                   * oep.NUM_GLB_PSUM + cl_x * oep.NUM_GLB_PSUM + router)
-            psum_router_mask |= 1 << bit
-    cocotb.start_soon(set_input(ptp, dut.psum_choose_i, psum_router_mask))
-    await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
     cocotb.start_soon(set_input(
         ptp, dut.psum_enable_i,
         (1 << (oep.Clusters_X * oep.Clusters_Y * oep.NUM_GLB_PSUM)) - 1,
