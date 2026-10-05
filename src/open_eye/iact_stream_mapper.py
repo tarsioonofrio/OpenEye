@@ -1070,7 +1070,7 @@ class DwIactStreamMapper(IactStreamMapper):
             for data_in_trans in range(data_per_trans):
                 try:
                     number_of_value = (data_in_trans + spad_data_trans * data_per_trans)
-                    value = gtu.to_twos_complement_string(spad[1][number_of_value][0], self.params.IACT_Bitwidth)
+                    value = gtu.to_twos_complement_string(spad[number_of_value][0], self.params.IACT_Bitwidth)
                     temp_trans = temp_trans + (int(value,2) << (data_in_trans * params.IACT_Bitwidth))
                 except:
                     pass
