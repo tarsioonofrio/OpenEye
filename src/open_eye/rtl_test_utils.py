@@ -1589,7 +1589,9 @@ def _dense_active_router_mask(layer_parameters, cl_x, cl_y, oep):
 
 async def _wait_for_dense_pes_ready(ptp, dut, layer_parameters, oep):
     """Wait until every active dense PE is ready to stream its PSUMs."""
-    max_cycles = _max_wait_cycles()
+    # This small direct-core FC workload should finish in far fewer cycles;
+    # avoid millions of expensive VHPI hierarchy reads if one PE is stuck.
+    max_cycles = min(_max_wait_cycles(), 10000)
     for _ in range(max_cycles):
         all_ready = True
         for cl_y in range(oep.Clusters_Y):
@@ -1614,9 +1616,24 @@ async def _wait_for_dense_pes_ready(ptp, dut, layer_parameters, oep):
         if all_ready:
             return
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+    states = []
+    for cl_y in range(oep.Clusters_Y):
+        for cl_x in range(oep.Clusters_X):
+            mask = _dense_active_router_mask(layer_parameters, cl_x, cl_y, oep)
+            cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+            for pe_x in range(oep.NUM_GLB_PSUM):
+                if not (mask & (1 << pe_x)):
+                    continue
+                pe = cluster.pe_cluster.gen_X[pe_x].gen_Y[0].pe
+                try:
+                    state = str(pe.current_state_computing.value)
+                except Exception:
+                    state = "?"
+                states.append(f"({cl_x},{cl_y},pe{pe_x})={state}")
     raise TimeoutError(
         "Active dense PEs did not reach WAIT_TO_SEND_PSUM within "
-        f"{max_cycles} cycles{_fsm_state_note(dut)}"
+        f"{max_cycles} cycles; states: {' '.join(states)}"
+        f"{_fsm_state_note(dut)}"
     )
 
 
