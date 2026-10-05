@@ -3855,8 +3855,14 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                             "delay_cluster_ready_out",
                             "delay_cluster_data_in",
                             "delay_cluster_data_out",
+                            "data_src_top_psum",
                             "enable_src_top_psum",
+                            "ready_src_top_psum",
+                            "data_dst_bottom_psum",
                             "enable_dst_bottom_psum",
+                            "ready_dst_bottom_psum",
+                            "pe_router_psum_data_i",
+                            "pe_router_psum_data_out",
                         )
                         trace_values = []
                         for trace_name in trace_fields:
