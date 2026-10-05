@@ -2736,6 +2736,11 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                         val(pe.second_spad_words_wght),
                         val(pe.enable_stream_i))
             lines += 1
+        if val(pe.wght_enable_i) not in (None, 0):
+            logger.info("pw t=%s WGHT ingress en=%s data=%s ready=%s",
+                        now, val(pe.wght_enable_i), raw(pe.wght_data_i),
+                        val(pe.wght_ready_o))
+            lines += 1
         if val(pe.iact_enable_i) not in (None, 0):
             cluster = dut.gen_x[cx].gen_y[cy]
             logger.info("pw t=%s IA ingress top_data=%s top_en=%s top_ready=%s "
