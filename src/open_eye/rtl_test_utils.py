@@ -1590,34 +1590,11 @@ def _dense_active_router_mask(layer_parameters, cl_x, cl_y, oep):
 async def _wait_for_dense_pes_ready(ptp, dut, layer_parameters, oep):
     """Wait until every active dense PE is ready to stream its PSUMs."""
     # This FC workload reached SEND_PSUM within about 55 cycles in the prior
-    # trace; bound the diagnostic and avoid millions of VHPI hierarchy reads.
+    # trace. Let it advance once, then take one bounded state snapshot.
     max_cycles = min(_max_wait_cycles(), 500)
-    poll_interval = 50
-    for _ in range(0, max_cycles, poll_interval):
-        all_ready = True
-        for cl_y in range(oep.Clusters_Y):
-            for cl_x in range(oep.Clusters_X):
-                mask = _dense_active_router_mask(
-                    layer_parameters, cl_x, cl_y, oep
-                )
-                cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
-                for pe_x in range(oep.NUM_GLB_PSUM):
-                    if not (mask & (1 << pe_x)):
-                        continue
-                    pe = cluster.pe_cluster.gen_X[pe_x].gen_Y[0].pe
-                    try:
-                        state = int(pe.current_state_computing.value)
-                    except (TypeError, ValueError):
-                        all_ready = False
-                        continue
-                    # PE.v localparam WAIT_TO_SEND_PSUM = 7. Asserting the
-                    # router request while the PE is IDLE sends stale zeros.
-                    if state != 7:
-                        all_ready = False
-        if all_ready:
-            return
-        await Timer(poll_interval * ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+    await Timer(max_cycles * ptp.clk_cycle, unit=ptp.clk_cycle_unit)
     states = []
+    all_ready = True
     for cl_y in range(oep.Clusters_Y):
         for cl_x in range(oep.Clusters_X):
             mask = _dense_active_router_mask(layer_parameters, cl_x, cl_y, oep)
@@ -1627,10 +1604,15 @@ async def _wait_for_dense_pes_ready(ptp, dut, layer_parameters, oep):
                     continue
                 pe = cluster.pe_cluster.gen_X[pe_x].gen_Y[0].pe
                 try:
-                    state = str(pe.current_state_computing.value)
+                    state_value = int(pe.current_state_computing.value)
+                    state = str(state_value)
                 except Exception:
                     state = "?"
+                    state_value = None
                 states.append(f"({cl_x},{cl_y},pe{pe_x})={state}")
+                all_ready &= state_value == 7
+    if all_ready:
+        return
     raise TimeoutError(
         "Active dense PEs did not reach WAIT_TO_SEND_PSUM within "
         f"{max_cycles} cycles; states: {' '.join(states)}"
