@@ -1587,6 +1587,38 @@ async def _wait_for_signal(ptp, handle, *, name, expected=None, context="", dut=
     )
 
 
+async def _wait_for_masked_signal(ptp, handle, mask, *, name, context="", dut=None):
+    """Wait until at least one selected lane is asserted on a packed signal."""
+    max_cycles = _max_wait_cycles()
+    for _ in range(max_cycles):
+        try:
+            value = int(handle.value)
+        except (TypeError, ValueError):
+            value = 0
+        if value & mask:
+            return value
+        await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+    state = _fsm_state_note(dut) if dut is not None else ""
+    raise TimeoutError(
+        f"{name} lanes 0x{mask:x} did not assert within {max_cycles} cycles"
+        f"{context}{state}"
+    )
+
+
+def _dense_active_output_mask(layer_parameters, oep):
+    """Map active dense PEs to their externally packed PSUM output lanes."""
+    mask = 0
+    for cl_y in range(oep.Clusters_Y):
+        for cl_x in range(oep.Clusters_X):
+            for router in range(oep.NUM_GLB_PSUM):
+                pe_x = oep.NUM_GLB_PSUM - router - 1
+                if layer_parameters.computing_mx[cl_x][cl_y][0][pe_x]:
+                    lane = ((cl_y * oep.Clusters_X + cl_x)
+                            * oep.NUM_GLB_PSUM + router)
+                    mask |= 1 << lane
+    return mask
+
+
 async def await_ready_signal(ptp, dut, settle_cycles=5000, max_wait_cycles=2000000,
                              report_every=200000):
     """Wait until the DUT has finished the current layer and wants the next one.
@@ -3303,10 +3335,12 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
         tile_offset = tile * columns * rows * per_column
         output_count = 0
         cycles = math.ceil(per_column / oep.PARALLEL_MACS)
+        active_output_mask = _dense_active_output_mask(layer_parameters, oep)
         try:
-            await _wait_for_signal(
-                ptp, dut.psum_enable_o, name="psum_enable_o",
-                context=" before dense core output", dut=dut,
+            await _wait_for_masked_signal(
+                ptp, dut.psum_enable_o, active_output_mask,
+                name="psum_enable_o", context=" before dense core output",
+                dut=dut,
             )
         except TimeoutError:
             def signal(name):
@@ -3409,9 +3443,10 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                 )
             for cl_y in range(rows):
                 for cl_x in range(columns):
-                    for router in reversed(range(oep.NUM_GLB_PSUM)):
+                    for router in range(oep.NUM_GLB_PSUM):
+                        pe_x = oep.NUM_GLB_PSUM - router - 1
                         if not layer_parameters.computing_mx[
-                            cl_x][cl_y][0][router]:
+                            cl_x][cl_y][0][pe_x]:
                             continue
                         lane = ((cl_y * columns + cl_x) * oep.NUM_GLB_PSUM
                                 + router)
@@ -3424,7 +3459,6 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                         if os.environ.get("TRACE_DENSE_OUTPUT", "0").lower() in {
                             "1", "true", "yes", "on"
                         }:
-                            pe_x = router
                             cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
                             pe = (cluster
                                   .pe_cluster.gen_X[pe_x].gen_Y[0].pe)
@@ -3469,9 +3503,10 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                                                str(pe.adder_o_w[0].value),
                                                str(pe.computing.value))
                                         )
-                                        # PE column i connects directly to PSUM
-                                        # router i in PE_cluster/OpenEye_Cluster.
-                                        if pe_x == router and pe_y == 0:
+                                        # The packed core PSUM lanes are reversed
+                                        # relative to the PE-column index.
+                                        if (pe_x == oep.NUM_GLB_PSUM - router - 1
+                                                and pe_y == 0):
                                             names = (
                                                 "values_valid", "raw_wght_w",
                                                 "second_spad_words_iact",
@@ -3806,9 +3841,11 @@ async def send_enable_dense(ptp, dut, layer_params, layer_repetition, oep):
     # WAIT_TO_SEND_PSUM. Keep the request asserted through computation and
     # release it after the output stream has begun, rather than pulsing it
     # immediately after compute_i where every PE can ignore it.
-    await _wait_for_signal(
-        ptp, dut.psum_enable_o, name="psum_enable_o",
-        context=" while requesting dense output", dut=dut,
+    await _wait_for_masked_signal(
+        ptp, dut.psum_enable_o,
+        _dense_active_output_mask(layer_params, oep),
+        name="psum_enable_o", context=" while requesting dense output",
+        dut=dut,
     )
 
     # Wait cycles based on partial sums per PE (divided by 2 for dual outputs)
