@@ -1381,6 +1381,11 @@ async def write_iact(ptp, dut, stream, oep, lp):
                             iact_enable_signal = iact_enable_signal + 2**(router + x_cluster * oep.NUM_GLB_IACT + y_cluster * oep.NUM_GLB_IACT * oep.Clusters_X)
                         except:
                             iact_enable_signal = iact_enable_signal
+            if os.environ.get("OPENEYE_TRACE_PE_WRITES", "0").lower() in {
+                "1", "true", "yes", "on"
+            }:
+                logger.info("write_iact position=%d enable=%x data=%x",
+                            position, iact_enable_signal, iact_transmission)
             cocotb.start_soon(set_input(ptp,(dut.iact_data_i), iact_transmission))
             iact_transmission = 0
             cocotb.start_soon(set_input(ptp,(dut.iact_enable_i), iact_enable_signal))
