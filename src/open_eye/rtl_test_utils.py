@@ -3835,6 +3835,44 @@ async def compare_stream_Dense(ptp, dut, layer_number, layer_repetition, layer_p
                     str(cluster.delay_psum_glb_i.value), delayed_inputs,
                     delayed_outputs, str(cluster.glb_cluster_psum_data_w.value),
                 )
+                # Dense K may span several cluster rows. The legacy bus trace
+                # above samples only (0,0), which hides whether partial sums
+                # from the other rows enter the vertical router chain. Record
+                # the handshake and payload at each cluster boundary while
+                # collecting outputs so the reduction path can be diagnosed.
+                for trace_y in range(rows):
+                    for trace_x in range(columns):
+                        trace_cluster = dut.gen_x[trace_x].gen_y[trace_y].OpenEye_Cluster
+                        trace_fields = (
+                            "router_mode_psum_i",
+                            "psum_choose_i",
+                            "pe_router_psum_enable_out",
+                            "pe_router_psum_ready_in",
+                            "pe_router_psum_enable_in",
+                            "pe_router_psum_ready_out",
+                            "delay_cluster_enable_in",
+                            "delay_cluster_enable_out",
+                            "delay_cluster_ready_out",
+                            "delay_cluster_data_in",
+                            "delay_cluster_data_out",
+                            "enable_src_top_psum",
+                            "enable_dst_bottom_psum",
+                        )
+                        trace_values = []
+                        for trace_name in trace_fields:
+                            try:
+                                trace_values.append(
+                                    "%s=%s" % (
+                                        trace_name,
+                                        str(getattr(trace_cluster, trace_name).value),
+                                    )
+                                )
+                            except Exception:
+                                continue
+                        logger.info(
+                            "densegrid cycle=%d cluster=(%d,%d) %s",
+                            psum_pe, trace_x, trace_y, " ".join(trace_values),
+                        )
             for cl_y in range(rows):
                 for cl_x in range(columns):
                     cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
