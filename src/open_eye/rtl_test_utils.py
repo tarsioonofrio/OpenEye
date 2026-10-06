@@ -1473,15 +1473,12 @@ async def write_iact(ptp, dut, stream, oep, lp):
     """
     iact_enable_signal = 0
     iact_transmission = 0
-    # Dense mode removes the overhead bits but the PE input pipeline still
-    # writes one 8-bit activation into its single-port SPAD per enabled cycle.
-    # Keep each packed transfer stable for every activation byte it contains;
-    # data_pipeline_iact shifts the remaining bytes on the following cycles.
-    dense_subword_cycles = 1
-    if getattr(oep, "SPARSITY_EN", 1) == 0:
-        dense_subword_cycles = max(
-            1, oep.IACT_Trans_Bitwidth // oep.IACT_WOH_Bitwidth
-        )
+    # data_pipeline_iact consumes one activation subword per enabled cycle.
+    # Keep each packed transfer stable until all of its subwords have passed:
+    # two 12-bit values in sparse mode, or three 8-bit values in dense mode.
+    subword_cycles = max(
+        1, oep.IACT_Trans_Bitwidth // oep.IACT_WOH_Bitwidth
+    )
     if(lp.skipIact != 1):
         await _wait_for_signal(
             ptp, dut.iact_ready_o, name="iact_ready_o",
@@ -1549,7 +1546,7 @@ async def write_iact(ptp, dut, stream, oep, lp):
                             position, iact_enable_signal, iact_transmission)
             cocotb.start_soon(set_input(ptp,(dut.iact_data_i), iact_transmission))
             cocotb.start_soon(set_input(ptp,(dut.iact_enable_i), iact_enable_signal))
-            for _ in range(dense_subword_cycles):
+            for _ in range(subword_cycles):
                 await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
             iact_transmission = 0
         cocotb.start_soon(set_input(ptp,(dut.iact_data_i), 0))
