@@ -2187,79 +2187,134 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
         x_repetitions = layer_parameters.iact_x_line_repetitions
         x_block_width = layer_parameters.iact_x_add_up // max(x_repetitions, 1)
         x_block_base = 0
-        for _ in range(_max_wait_cycles()):
-            if not _signal_is(dut.enable_dma_o, 1):
-                break
-            if (read_data):
-                if(logging.DEBUG >= login_level):
-                    try:
-                        txt_file.write(bin(int(dut.data_dma_o.value))[2:].zfill(oep.DMA_BITWIDTH) + "\n")
-                    except:
-                        txt_file.close()
-                        storage_file.close()
-                        logger.error("Error writing output txt-file")
-                        raise Exception("X detected.")
-                if (current_cycle < values_per_transmission):
-                    for i in range(words):
-                        if(logging.DEBUG >= login_level):
-                            storage_file.write("f: " + str(f) + " x: " + str(x) + " y: " + str(y) + "\n")
-                        
-                        try:
-                            dram.fmap[layer_number + 1][f][x][y] = int(dut.data_dma_o.value[oep.DATA_PSUM_BITWIDTH*(i+1)-1:oep.DATA_PSUM_BITWIDTH*i])
-                            if (dram.fmap[layer_number + 1][f][x][y] >= 2**(oep.DATA_PSUM_BITWIDTH-1)):
-                                dram.fmap[layer_number + 1][f][x][y] = dram.fmap[layer_number + 1][f][x][y] - 2**oep.DATA_PSUM_BITWIDTH
-                        except:
-                            pass
-                        x = x + 1
-                    if x_repetitions > 1:
-                        # A row wider than one repetition is read out as
-                        # x_block_width-pixel blocks: every filter for
-                        # repetition 0, then every filter for repetition 1...
-                        # (the psum buffer address is filter + filters * repetition).
-                        if (x - x_block_base >= x_block_width):
-                            f = f + 1
-                            x = x_block_base
-                            if(f == layer_parameters.filters):
-                                f = 0
-                                x_block_base = x_block_base + x_block_width
-                                x = x_block_base
-                                if(x_block_base >= layer_parameters.iact_x_add_up):
-                                    x_block_base = 0
-                                    x = 0
-                                    y = y + 1
-                                    if(y >= layer_parameters.iact_size_y):
-                                        y = 0
-                    elif (current_cycle % math.ceil(oep.PEs_X/words) == math.ceil(oep.PEs_X/words) - 1):
-                        if(x >= layer_parameters.iact_size_x):
-                            x = 0
-                            f = f + 1
-                            if(f == layer_parameters.filters):
-                                f = 0
-                                y = y + 1
-                                if(y >= layer_parameters.iact_size_y):
-                                    y = 0
-                else:
-                    for i in range(words):
-                        if(logging.DEBUG >= login_level):
-                            storage_file.write("Empty storage line." + "\n")
-                current_cycle = current_cycle + 1
-                if (current_cycle == transmissions_per_cycle):
-                    current_cycle = 0
+        compute_cycles = int(
+            layer_parameters.needed_refreshes_mx[layer_repetition][0]
+        )
+        await _wait_for_signal(
+            ptp, dut.start_new_cycle, name="start_new_cycle", expected=1,
+            context=" before the first serial convolution output", dut=dut,
+        )
+        cocotb.start_soon(set_input(ptp, dut.psum_transmitted_i, 0))
+        await _wait_for_signal(
+            ptp, dut.start_new_cycle, name="start_new_cycle", expected=0,
+            context=" before collecting the first serial convolution output",
+            dut=dut,
+        )
 
-            if random.randint(1, 100) <= chance:
-                read_data = 1
-                cocotb.start_soon(set_input(ptp,(dut.ready_dma_i), 1))
-            else:
-                read_data = 0
-                cocotb.start_soon(set_input(ptp,(dut.ready_dma_i), 0))
-            await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
-        else:
-            raise TimeoutError(
-                "enable_dma_o remained asserted while collecting convolution "
-                f"output{_fsm_state_note(dut)}"
+        for compute_cycle in range(compute_cycles):
+            await _wait_for_signal(
+                ptp, dut.enable_dma_o, name="enable_dma_o",
+                context=f" before serial convolution cycle {compute_cycle}",
+                dut=dut,
             )
+            for _ in range(_max_wait_cycles()):
+                if not _signal_is(dut.enable_dma_o, 1):
+                    break
+                if read_data:
+                    if logging.DEBUG >= login_level:
+                        try:
+                            txt_file.write(
+                                bin(int(dut.data_dma_o.value))[2:].zfill(
+                                    oep.DMA_BITWIDTH
+                                ) + "\n"
+                            )
+                        except Exception as exc:
+                            txt_file.close()
+                            storage_file.close()
+                            logger.error("Error writing output txt-file")
+                            raise RuntimeError("X detected in convolution DMA output") from exc
+                    if current_cycle < values_per_transmission:
+                        for i in range(words):
+                            if logging.DEBUG >= login_level:
+                                storage_file.write(
+                                    "f: " + str(f) + " x: " + str(x)
+                                    + " y: " + str(y) + "\n"
+                                )
 
-        cocotb.start_soon(set_input(ptp,(dut.ready_dma_i), 0))
+                            try:
+                                dram.fmap[layer_number + 1][f][x][y] = int(
+                                    dut.data_dma_o.value[
+                                        oep.DATA_PSUM_BITWIDTH * (i + 1) - 1:
+                                        oep.DATA_PSUM_BITWIDTH * i
+                                    ]
+                                )
+                                if (dram.fmap[layer_number + 1][f][x][y]
+                                        >= 2 ** (oep.DATA_PSUM_BITWIDTH - 1)):
+                                    dram.fmap[layer_number + 1][f][x][y] -= (
+                                        2 ** oep.DATA_PSUM_BITWIDTH
+                                    )
+                            except (IndexError, TypeError, ValueError):
+                                pass
+                            x += 1
+                        if x_repetitions > 1:
+                            # A row wider than one repetition is read out as
+                            # x_block_width-pixel blocks: every filter for
+                            # repetition 0, then every filter for repetition 1...
+                            # (the psum buffer address is filter + filters * repetition).
+                            if x - x_block_base >= x_block_width:
+                                f += 1
+                                x = x_block_base
+                                if f == layer_parameters.filters:
+                                    f = 0
+                                    x_block_base += x_block_width
+                                    x = x_block_base
+                                    if x_block_base >= layer_parameters.iact_x_add_up:
+                                        x_block_base = 0
+                                        x = 0
+                                        y += 1
+                                        if y >= layer_parameters.iact_size_y:
+                                            y = 0
+                        elif (current_cycle % math.ceil(oep.PEs_X / words)
+                              == math.ceil(oep.PEs_X / words) - 1):
+                            if x >= layer_parameters.iact_size_x:
+                                x = 0
+                                f += 1
+                                if f == layer_parameters.filters:
+                                    f = 0
+                                    y += 1
+                                    if y >= layer_parameters.iact_size_y:
+                                        y = 0
+                    elif logging.DEBUG >= login_level:
+                        for _ in range(words):
+                            storage_file.write("Empty storage line.\n")
+                    current_cycle += 1
+                    if current_cycle == transmissions_per_cycle:
+                        current_cycle = 0
+
+                if random.randint(1, 100) <= chance:
+                    read_data = 1
+                    cocotb.start_soon(set_input(ptp, dut.ready_dma_i, 1))
+                else:
+                    read_data = 0
+                    cocotb.start_soon(set_input(ptp, dut.ready_dma_i, 0))
+                await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+            else:
+                raise TimeoutError(
+                    "enable_dma_o remained asserted while collecting serial "
+                    f"convolution cycle {compute_cycle}"
+                    f"{_fsm_state_note(dut)}"
+                )
+
+            cocotb.start_soon(set_input(ptp, dut.ready_dma_i, 0))
+            if compute_cycle + 1 < compute_cycles:
+                cocotb.start_soon(set_input(ptp, dut.psum_transmitted_i, 1))
+                await _wait_for_signal(
+                    ptp, dut.start_new_cycle, name="start_new_cycle", expected=1,
+                    context=(" before serial convolution cycle "
+                             f"{compute_cycle + 1}"), dut=dut,
+                )
+                cocotb.start_soon(set_input(ptp, dut.psum_transmitted_i, 0))
+                await _wait_for_signal(
+                    ptp, dut.start_new_cycle, name="start_new_cycle", expected=0,
+                    context=(" before collecting serial convolution cycle "
+                             f"{compute_cycle + 1}"), dut=dut,
+                )
+
+        await _wait_for_signal(
+            ptp, dut.finished_cycles, name="finished_cycles",
+            expected=compute_cycles,
+            context=" after serial convolution compute schedule", dut=dut,
+        )
 
     if(math.floor(layer_repetition%(layer_parameters.iact_transmissions_pe*layer_parameters.needed_wght_transmissions)) == \
         (layer_parameters.iact_transmissions_pe*layer_parameters.needed_wght_transmissions-1)):
