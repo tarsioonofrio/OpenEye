@@ -2298,7 +2298,7 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                 if conv_trace_window:
                     logger.info(
                         "conv_handshake_summary captured=%d expected=%d "
-                        "output_words=%d per_lane=%s finished=%s/%s",
+                        "output_words=%d per_lane=%s %s",
                         captured_beats, expected_beats,
                         len(output_order[layer_repetition]),
                         sorted(conv_lane_accepts.items()),
