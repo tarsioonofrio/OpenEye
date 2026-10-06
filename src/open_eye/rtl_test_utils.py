@@ -3137,6 +3137,7 @@ async def trace_pe_wght_writes(ptp, dut, oep):
     lines = 0
     last_state = None
     last_psum = None
+    previous_psum_read = None
     while lines < 4000:
         await FallingEdge(dut.clk_i)
         now = cocotb.utils.get_sim_time("ns")
@@ -3145,6 +3146,14 @@ async def trace_pe_wght_writes(ptp, dut, oep):
         if now > t1:
             return
         state = val(pe.current_state_computing)
+        current_psum_read = (
+            tuple(val(pe.psum_spad_addr_r[i])
+                  for i in range(oep.PARALLEL_MACS)),
+            tuple(val(pe.psum_data_SPad_en_r_i[i])
+                  for i in range(oep.PARALLEL_MACS)),
+        )
+        read_request_for_data = previous_psum_read
+        previous_psum_read = current_psum_read
         if state != last_state:
             logger.info("pw t=%s PE state=%s compute_i=%s pending=%s "
                         "iact_set=%s wght_set=%s data_set=%s iact_max=%s "
@@ -3229,17 +3238,31 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                 lines += 1
         if state == 8:
             logger.info(
-                "pw t=%s SEND_PSUM spad_addr=%s spad_read0=%s spad_read1=%s "
-                "spad_re0=%s spad_re1=%s psum_in=%s in_en=%s select=%s "
+                "pw t=%s SEND_PSUM spad_addr=%s addr_base=%s "
+                "ram_req_for_data=%s spad_read0=%s spad_read1=%s "
+                "spad_re=(%s,%s) spad_re_eff=(%s,%s) "
+                "spad_we=(%s,%s) spad_waddr=(%s,%s) spad_wdata=(%s,%s) "
+                "psum_in=%s in_en=%s select=%s "
                 "use0=%s use1=%s add0_0=%s add0_1=%s add1_0=%s add1_1=%s "
                 "sum0=%s sum1=%s psum_out=%s out_en=%s ready_i=%s ready_o=%s "
                 "adder_en=%s tree_en=%s en_pipe=(in=%s mid=%s out=%s)",
                 now,
-                val(pe.psum_spad_addr_r[0]),
+                current_psum_read[0],
+                tuple(val(pe.psum_spad_addr_mem[i])
+                      for i in range(oep.PARALLEL_MACS)),
+                read_request_for_data,
                 raw(pe.psum_spad_data_o[0]),
                 raw(pe.psum_spad_data_o[1]),
                 raw(pe.psum_data_SPad_en_r[0]),
                 raw(pe.psum_data_SPad_en_r[1]),
+                raw(pe.psum_data_SPad_en_r_i[0]),
+                raw(pe.psum_data_SPad_en_r_i[1]),
+                raw(pe.psum_data_SPad_en_w_i[0]),
+                raw(pe.psum_data_SPad_en_w_i[1]),
+                raw(pe.psum_spad_addr_w[0]),
+                raw(pe.psum_spad_addr_w[1]),
+                raw(pe.psum_spad_data_i[0]),
+                raw(pe.psum_spad_data_i[1]),
                 raw(pe.psum_data_i),
                 raw(pe.psum_enable_i),
                 val(pe.psum_select),
