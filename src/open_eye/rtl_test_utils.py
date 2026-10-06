@@ -3136,9 +3136,22 @@ async def trace_pe_wght_writes(ptp, dut, oep):
         wa = None
         logger.info("pw: weight addr SPad not reachable (%s)", type(exc).__name__)
     try:
+        ia = getattr(pe, "gen_iact_addr_spad").iact_addr_SPad
+    except Exception as exc:
+        ia = None
+        logger.info("pw: iact addr SPad not reachable (%s)", type(exc).__name__)
+    try:
         wh = pe.wght_data_handler
     except Exception:
         wh = None
+    sparse_fsm = getattr(pe, "gen_sparse_fsm", None)
+
+    def subval(parent, name):
+        try:
+            return val(getattr(parent, name))
+        except Exception:
+            return None
+
     lines = 0
     last_state = None
     last_psum = None
@@ -3163,6 +3176,8 @@ async def trace_pe_wght_writes(ptp, dut, oep):
             logger.info("pw t=%s PE state=%s compute_i=%s pending=%s "
                         "iact_set=%s wght_set=%s data_set=%s iact_max=%s "
                         "channels=%s filters=%s iact_words=%s wght_words=%s "
+                        "iact_data_ptr=%s iact_addr_ptr=%s iact_addr_data=%s "
+                        "iact_addr_current=%s iact_addr_count=%s "
                         "psum_enable=%s psum_ready=%s",
                         now, state, val(pe.compute_i),
                         val(pe.compute_pending), val(pe.iact_set),
@@ -3170,8 +3185,12 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                         val(pe.iact_addr_max_reg), val(pe.channel_reg_C0),
                         val(pe.filters_reg_M0),
                         val(pe.second_spad_words_iact),
-                        val(pe.second_spad_words_wght), val(pe.psum_enable_o),
-                        val(pe.psum_ready_i))
+                        val(pe.second_spad_words_wght),
+                        val(pe.iact_data_SPad_addr), val(pe.iact_addr_SPad_addr),
+                        val(pe.iact_addr_SPad_data_r),
+                        subval(sparse_fsm, "iact_addr_current"),
+                        subval(sparse_fsm, "iact_addr_count"),
+                        val(pe.psum_enable_o), val(pe.psum_ready_i))
             last_state = state
             lines += 1
         if state == 6:
@@ -3210,6 +3229,8 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                     "wght_vec=%s wght_start=%s wght_end=%s "
                     "wght_start_pre=%s wght_end_pre=%s "
                     "wght_words=%s first_wght_words=%s "
+                    "iact_data_ptr=%s iact_addr_ptr=%s iact_addr_data=%s "
+                    "iact_addr_current=%s iact_addr_count=%s "
                     "psum_r_en=%s psum_w_en=%s psum_r_addr=%s psum_w_addr=%s "
                     "psum_d0=%s psum_d1=%s psum_in=%s psum_in_en=%s "
                     "psum_out=%s psum_out_en=%s",
@@ -3222,6 +3243,9 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                     val(sparse.wght_data_start), val(sparse.wght_data_end),
                     val(sparse.wght_data_start_pre), val(sparse.wght_data_end_pre),
                     val(pe.second_spad_words_wght), val(pe.first_spad_words_wght),
+                    val(pe.iact_data_SPad_addr), val(pe.iact_addr_SPad_addr),
+                    val(pe.iact_addr_SPad_data_r), val(sparse.iact_addr_current),
+                    val(sparse.iact_addr_count),
                     raw(pe.psum_data_SPad_en_r[0]), raw(pe.psum_data_SPad_en_w[0]),
                     val(pe.psum_spad_addr_r[0]), val(pe.psum_spad_addr_w[0]),
                     raw(pe.psum_spad_data_i[0]), raw(pe.psum_spad_data_i[1]),
@@ -3368,6 +3392,18 @@ async def trace_pe_wght_writes(ptp, dut, oep):
             d = val(isp.data_i)
             logger.info("pw t=%s I addr=%s pay=%s oh=%s", now, val(isp.addr_i), None if d is None else (d & 0xFF),
                         None if d is None else (d >> 8))
+            lines += 1
+        if ia is not None and val(ia.we_i) == 1:
+            logger.info("pw t=%s IA_ADDR write_addr=%s data=%s", now,
+                        val(ia.addr_i), val(ia.data_i))
+            lines += 1
+        if ia is not None and val(ia.re_i) == 1:
+            logger.info("pw t=%s IA_ADDR read_addr=%s returned=%s iact_data_ptr=%s "
+                        "iact_addr_current=%s iact_addr_count=%s", now,
+                        val(pe.iact_addr_SPad_addr), val(pe.iact_addr_SPad_data_r),
+                        val(pe.iact_data_SPad_addr),
+                        subval(sparse_fsm, "iact_addr_current"),
+                        subval(sparse_fsm, "iact_addr_count"))
             lines += 1
 
 
