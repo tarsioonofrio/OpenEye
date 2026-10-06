@@ -2073,6 +2073,7 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
             expected_beats = output_groups * beats_per_group
             captured_beats = 0
             trace_low_valid_cycles = 0
+            conv_lane_accepts = {}
             for _ in range(_max_wait_cycles()):
                 if _signal_is(dut.psum_enable_o, 0):
                     if captured_beats == expected_beats and not conv_trace_window:
@@ -2126,10 +2127,15 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                         except Exception:
                                             return "X"
 
-                                    try:
-                                        ready = int(dut.psum_ready_i.value[output_lane])
-                                    except Exception:
-                                        ready = "X"
+                                try:
+                                    ready = int(dut.psum_ready_i.value[output_lane])
+                                except Exception:
+                                    ready = "X"
+                                if trace_conv_beat and ready == 1:
+                                    conv_lane_accepts[output_lane] = (
+                                        conv_lane_accepts.get(output_lane, 0) + 1
+                                    )
+                                if trace_conv_beat and output_lane in (0, 31):
                                     cluster = (dut.gen_x[actual_x].gen_y[actual_y]
                                                .OpenEye_Cluster)
                                     pe_rows = []
@@ -2148,16 +2154,35 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                             except Exception:
                                                 items = "?"
                                             addresses.append(f"{signal_name}={items}")
+                                        used_bits = []
+                                        for mac in range(oep.PARALLEL_MACS):
+                                            try:
+                                                address = trace_value(
+                                                    pe.psum_spad_addr_r[mac]
+                                                )
+                                                bitmap = trace_value(
+                                                    pe.used_psum_memory[mac]
+                                                )
+                                                bit = ((bitmap >> address) & 1
+                                                       if isinstance(address, int)
+                                                       and isinstance(bitmap, int)
+                                                       else "X")
+                                            except Exception:
+                                                bit = "X"
+                                            used_bits.append(bit)
                                         pe_rows.append(
                                             f"r{pe_row}[st={trace_value(pe.current_state_computing)} "
+                                            f"in={trace_value(pe.psum_enable_i)} "
                                             f"en={trace_value(pe.psum_enable_o)} "
                                             f"data={trace_value(pe.psum_data_o)} "
+                                            f"used_at_addr={used_bits} "
                                             + " ".join(addresses) + "]"
                                         )
                                     logger.info(
                                         "conv_handshake beat=%d t=%s lane=%d c=(%d,%d) "
                                         "valid=%s ready=%s data=%s top=(finished=%s needed=%s "
-                                        "new_cycle=%s compute_cluster=%s transmitted=%s) PE=%s",
+                                        "new_cycle=%s compute_cluster=%s transmitted=%s "
+                                        "request=%s) PE=%s",
                                         captured_beats,
                                         cocotb.utils.get_sim_time("ns"), output_lane,
                                         actual_x, actual_y, trace_value(dut.psum_enable_o),
@@ -2167,6 +2192,7 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                         trace_value(dut.start_new_cycle),
                                         trace_value(dut.compute_cluster_i_reg),
                                         trace_value(dut.psum_transmitted_i),
+                                        trace_value(dut.psum_enable_i),
                                         " ".join(pe_rows),
                                     )
                                 if (outputvalue is not None and psum_trace_lines < 32
@@ -2269,6 +2295,15 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                     f"{_fsm_state_note(dut)}"
                 )
             if captured_beats != expected_beats:
+                if conv_trace_window:
+                    logger.info(
+                        "conv_handshake_summary captured=%d expected=%d "
+                        "output_words=%d per_lane=%s finished=%s/%s",
+                        captured_beats, expected_beats,
+                        len(output_order[layer_repetition]),
+                        sorted(conv_lane_accepts.items()),
+                        _signal_note(dut, ("finished_cycles", "needed_cycles_i_reg")),
+                    )
                 raise AssertionError(
                     "Convolution PSUM transfer ended after "
                     f"{captured_beats}/{expected_beats} valid beats"
