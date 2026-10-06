@@ -2661,7 +2661,8 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                     "weight0=%s weight1=%s fac1_0=%s fac2_0=%s "
                     "mult0=%s mult1=%s valid=%s sum0=%s sum1=%s "
                     "adder0=%s adder1=%s psum_use=%s psum_r_addr=%s "
-                    "psum_w_addr=%s psum_w_en=%s",
+                    "psum_w_addr=%s psum_w_en=%s psum_in=%s psum_in_en=%s "
+                    "psum_out=%s psum_out_en=%s",
                     now, val(pe.iact_data_SPad_addr),
                     raw(pe.iact_data_spad_pay), raw(pe.iact_data_current_3),
                     val(pe.wght_data_vec), val(dense.wght_filter),
@@ -2675,6 +2676,8 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                     raw(pe.use_psum[0]), val(pe.psum_spad_addr_r[0]),
                     val(pe.psum_spad_addr_w[0]),
                     raw(pe.psum_data_SPad_en_w_i[0]),
+                    raw(pe.psum_data_i), raw(pe.psum_enable_i),
+                    raw(pe.psum_data_o), raw(pe.psum_enable_o),
                 )
             else:
                 sparse = pe.gen_sparse_fsm
@@ -2686,7 +2689,8 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                     "wght_start_pre=%s wght_end_pre=%s "
                     "wght_words=%s first_wght_words=%s "
                     "psum_r_en=%s psum_w_en=%s psum_r_addr=%s psum_w_addr=%s "
-                    "psum_d0=%s psum_d1=%s",
+                    "psum_d0=%s psum_d1=%s psum_in=%s psum_in_en=%s "
+                    "psum_out=%s psum_out_en=%s",
                     now, val(pe.iact_data_SPad_addr), val(pe.wght_data_SPad_addr),
                     raw(pe.iact_data_spad_pay), raw(pe.wght_data_spad_pay[0]),
                     raw(pe.wght_data_spad_pay[1]), raw(pe.mult_fac_1[0]),
@@ -2699,6 +2703,8 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                     raw(pe.psum_data_SPad_en_r[0]), raw(pe.psum_data_SPad_en_w[0]),
                     val(pe.psum_spad_addr_r[0]), val(pe.psum_spad_addr_w[0]),
                     raw(pe.psum_spad_data_i[0]), raw(pe.psum_spad_data_i[1]),
+                    raw(pe.psum_data_i), raw(pe.psum_enable_i),
+                    raw(pe.psum_data_o), raw(pe.psum_enable_o),
                 )
             lines += 1
         if state == 7:
