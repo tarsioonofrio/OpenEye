@@ -2795,7 +2795,20 @@ async def trace_pe_wght_writes(ptp, dut, oep):
             lines += 1
         if val(ws.we_i) == 1:
             d = val(ws.data_i)
-            logger.info("pw t=%s W addr=%s pay0=%s", now, val(ws.addr_i), None if d is None else (d & 0xFF))
+            lanes = []
+            if d is not None:
+                lane_width = oep.WGHT_WOH_Bitwidth
+                lane_mask = (1 << lane_width) - 1
+                payload_mask = (1 << oep.WGHT_Bitwidth) - 1
+                for lane in range(oep.PARALLEL_MACS):
+                    word = (d >> (lane * lane_width)) & lane_mask
+                    payload = word & payload_mask
+                    if payload & (1 << (oep.WGHT_Bitwidth - 1)):
+                        payload -= 1 << oep.WGHT_Bitwidth
+                    overhead = word >> oep.WGHT_Bitwidth
+                    lanes.append((payload, overhead))
+            logger.info("pw t=%s W addr=%s data=%s lanes=%s",
+                        now, val(ws.addr_i), None if d is None else hex(d), lanes)
             lines += 1
         if val(isp.we_i) == 1:
             d = val(isp.data_i)
