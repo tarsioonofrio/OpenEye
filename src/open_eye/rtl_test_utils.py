@@ -2031,6 +2031,18 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
         )
     except ValueError:
         psum_trace_word_limit = 32
+    try:
+        conv_trace_window = os.environ.get(
+            "OPENEYE_TRACE_CONV_HANDSHAKES", ""
+        ).strip()
+        if conv_trace_window:
+            conv_trace_first, conv_trace_last = (
+                int(part) for part in conv_trace_window.split(":", 1)
+            )
+        else:
+            conv_trace_first, conv_trace_last = -1, -1
+    except (TypeError, ValueError):
+        conv_trace_first, conv_trace_last = -1, -1
     les.current_position = 0
     conv_feedback_words = []
     if(logging.DEBUG >= login_level):
@@ -2070,6 +2082,9 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                 except ValueError:
                     pass
                 captured_beats += 1
+                trace_conv_beat = (
+                    conv_trace_first <= captured_beats <= conv_trace_last
+                )
                 cluster_order = []
                 for a in range(layer_parameters.used_Y_cluster):
                     for b in range(0,oep.Clusters_Y,layer_parameters.used_Y_cluster):
@@ -2090,6 +2105,56 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                     outputvalue = int(psum_output[upper_limit - 1:lower_limit])
                                 except ValueError:
                                     outputvalue = None
+                                if trace_conv_beat:
+                                    def trace_value(signal):
+                                        try:
+                                            return int(signal.value)
+                                        except Exception:
+                                            return "X"
+
+                                    try:
+                                        ready = int(dut.psum_ready_i.value[output_lane])
+                                    except Exception:
+                                        ready = "X"
+                                    cluster = (dut.gen_x[actual_x].gen_y[actual_y]
+                                               .OpenEye_Cluster)
+                                    pe_rows = []
+                                    for pe_row in range(oep.PEs_Y):
+                                        pe = (cluster.pe_cluster.gen_X[router]
+                                              .gen_Y[pe_row].pe)
+                                        addresses = []
+                                        for signal_name in (
+                                            "psum_spad_addr_r", "psum_spad_addr_mem",
+                                            "psum_spad_addr_w", "use_psum",
+                                        ):
+                                            try:
+                                                array = getattr(pe, signal_name)
+                                                items = [trace_value(array[index])
+                                                         for index in range(oep.PARALLEL_MACS)]
+                                            except Exception:
+                                                items = "?"
+                                            addresses.append(f"{signal_name}={items}")
+                                        pe_rows.append(
+                                            f"r{pe_row}[st={trace_value(pe.current_state_computing)} "
+                                            f"en={trace_value(pe.psum_enable_o)} "
+                                            f"data={trace_value(pe.psum_data_o)} "
+                                            + " ".join(addresses) + "]"
+                                        )
+                                    logger.info(
+                                        "conv_handshake beat=%d t=%s lane=%d c=(%d,%d) "
+                                        "valid=%s ready=%s data=%s top=(finished=%s needed=%s "
+                                        "new_cycle=%s compute_cluster=%s transmitted=%s) PE=%s",
+                                        captured_beats,
+                                        cocotb.utils.get_sim_time("ns"), output_lane,
+                                        actual_x, actual_y, trace_value(dut.psum_enable_o),
+                                        ready, outputvalue,
+                                        trace_value(dut.finished_cycles),
+                                        trace_value(dut.needed_cycles_i_reg),
+                                        trace_value(dut.start_new_cycle),
+                                        trace_value(dut.compute_cluster_i_reg),
+                                        trace_value(dut.psum_transmitted_i),
+                                        " ".join(pe_rows),
+                                    )
                                 if (outputvalue is not None and psum_trace_lines < 32
                                         and os.environ.get(
                                             "OPENEYE_TRACE_PSUM_CAPTURE", "0"
