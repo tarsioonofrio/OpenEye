@@ -2074,13 +2074,15 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
             )
             expected_beats = output_groups * beats_per_group
             captured_beats = 0
+            mapped_beats = 0
+            conv_refresh_beat_counts = {}
             trace_low_valid_cycles = 0
             conv_lane_accepts = {}
             for _ in range(_max_wait_cycles()):
                 if _signal_is(dut.psum_enable_o, 0):
-                    if captured_beats == expected_beats and not conv_trace_window:
+                    if mapped_beats == expected_beats and not conv_trace_window:
                         break
-                    if conv_trace_window and captured_beats > expected_beats:
+                    if conv_trace_window and mapped_beats >= expected_beats:
                         try:
                             finished = int(dut.finished_cycles.value)
                         except Exception:
@@ -2094,13 +2096,22 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                     await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
                     continue
                 trace_low_valid_cycles = 0
+                try:
+                    refresh_id = int(dut.finished_cycles.value)
+                except Exception:
+                    refresh_id = -1
+                refresh_beat = conv_refresh_beat_counts.get(refresh_id, 0)
+                conv_refresh_beat_counts[refresh_id] = refresh_beat + 1
+                map_current_beat = refresh_beat < beats_per_group
                 feedback_word_index = len(conv_feedback_words)
                 feedback_word_added = False
-                try:
-                    conv_feedback_words.append(int(dut.psum_data_o.value))
-                    feedback_word_added = True
-                except ValueError:
-                    pass
+                if map_current_beat:
+                    try:
+                        conv_feedback_words.append(int(dut.psum_data_o.value))
+                        feedback_word_added = True
+                        mapped_beats += 1
+                    except ValueError:
+                        pass
                 captured_beats += 1
                 trace_conv_beat = (
                     conv_trace_first <= captured_beats <= conv_trace_last
@@ -2111,16 +2122,13 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                 feedback_tag = {
                     "beat": captured_beats,
                     "time": str(cocotb.utils.get_sim_time("ns")),
-                    "refresh": None,
+                    "refresh": refresh_id,
+                    "refresh_beat": refresh_beat,
+                    "mapped": map_current_beat,
                     "lanes": {},
                 }
                 if feedback_word_added:
                     conv_feedback_tags.append(feedback_tag)
-                if trace_roundtrip:
-                    try:
-                        feedback_tag["refresh"] = int(dut.finished_cycles.value)
-                    except Exception:
-                        pass
                 cluster_order = []
                 for a in range(layer_parameters.used_Y_cluster):
                     for b in range(0,oep.Clusters_Y,layer_parameters.used_Y_cluster):
@@ -2229,11 +2237,13 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                     if trace_conv_beat:
                                         logger.info(
                                             "conv_roundtrip_source word=%d beat=%d t=%s "
-                                            "refresh=%s lane=%d ready=%s value=%s "
+                                            "refresh=%s refresh_beat=%d mapped=%s "
+                                            "lane=%d ready=%s value=%s "
                                             "slots_by_mac=%s pe_chain=%s",
                                             feedback_word_index, captured_beats,
                                             feedback_tag["time"],
-                                            feedback_tag["refresh"], output_lane,
+                                            feedback_tag["refresh"], refresh_beat,
+                                            map_current_beat, output_lane,
                                             ready, outputvalue,
                                             feedback_tag["lanes"][output_lane]["slots_by_mac"],
                                             pe_chain,
@@ -2334,6 +2344,8 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                         len(conv_feedback_words),
                                         " ".join(pe_rows),
                                     )
+                                if not map_current_beat:
+                                    continue
                                 if (outputvalue is not None and psum_trace_lines < 32
                                         and os.environ.get(
                                             "OPENEYE_TRACE_PSUM_CAPTURE", "0"
@@ -2430,17 +2442,19 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
             else:
                 raise TimeoutError(
                     "Timed out collecting convolution PSUM handshakes: "
-                    f"captured {captured_beats}/{expected_beats} beats; "
+                    f"mapped {mapped_beats}/{expected_beats} beats "
+                    f"after {captured_beats} valid output cycles; "
                     f"{_fsm_state_note(dut)}"
                 )
-            if captured_beats != expected_beats:
+            if mapped_beats != expected_beats:
                 if conv_trace_window:
                     logger.info(
-                        "conv_handshake_summary captured=%d expected=%d "
-                        "output_words=%d per_lane=%s %s",
-                        captured_beats, expected_beats,
+                        "conv_handshake_summary valid_cycles=%d mapped=%d "
+                        "expected=%d output_words=%d per_lane=%s refresh_beats=%s %s",
+                        captured_beats, mapped_beats, expected_beats,
                         len(output_order[layer_repetition]),
                         sorted(conv_lane_accepts.items()),
+                        sorted(conv_refresh_beat_counts.items()),
                         _signal_note(dut, ("finished_cycles", "needed_cycles_i_reg")),
                     )
                     logger.warning(
@@ -2450,7 +2464,8 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                 else:
                     raise AssertionError(
                         "Convolution PSUM transfer ended after "
-                        f"{captured_beats}/{expected_beats} valid beats"
+                        f"{mapped_beats}/{expected_beats} mapped beats "
+                        f"in {captured_beats} valid output cycles"
                     )
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
         cocotb.start_soon(set_input(ptp,(dut.psum_enable_i), 0))
