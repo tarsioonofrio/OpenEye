@@ -3232,7 +3232,8 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                 "pw t=%s SEND_PSUM spad_addr=%s spad_read0=%s spad_read1=%s "
                 "spad_re0=%s spad_re1=%s psum_in=%s in_en=%s select=%s "
                 "use0=%s use1=%s add0_0=%s add0_1=%s add1_0=%s add1_1=%s "
-                "sum0=%s sum1=%s psum_out=%s out_en=%s ready_i=%s ready_o=%s",
+                "sum0=%s sum1=%s psum_out=%s out_en=%s ready_i=%s ready_o=%s "
+                "adder_en=%s tree_en=%s en_pipe=(in=%s mid=%s out=%s)",
                 now,
                 val(pe.psum_spad_addr_r[0]),
                 raw(pe.psum_spad_data_o[0]),
@@ -3254,6 +3255,11 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                 raw(pe.psum_enable_o),
                 raw(pe.psum_ready_i),
                 raw(pe.psum_ready_o),
+                raw(pe.adder_en[0]),
+                raw(pe.adder_tree_en),
+                raw(pe.psum_enable_i),
+                raw(pe.psum_enable),
+                raw(pe.psum_enable_o),
             )
             lines += 1
         if wa is not None and val(wa.we_i) == 1:
