@@ -2170,13 +2170,33 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                             except Exception:
                                                 bit = "X"
                                             used_bits.append(bit)
+                                        mac_inputs = []
+                                        for mac in range(oep.PARALLEL_MACS):
+                                            mac_signals = []
+                                            for signal_name in (
+                                                "psum_spad_data_o", "adder_summand_1",
+                                                "adder_summand_2", "adder_o_w",
+                                                "use_psum", "reuse_psum_spad",
+                                                "reused_data", "psum_data_SPad_en_r",
+                                                "psum_data_SPad_en_w",
+                                            ):
+                                                try:
+                                                    signal = getattr(pe, signal_name)
+                                                    value = trace_value(signal[mac])
+                                                except Exception:
+                                                    value = "X"
+                                                mac_signals.append(f"{signal_name}={value}")
+                                            mac_inputs.append(
+                                                f"m{mac}[" + " ".join(mac_signals) + "]"
+                                            )
                                         pe_rows.append(
                                             f"r{pe_row}[st={trace_value(pe.current_state_computing)} "
                                             f"in={trace_value(pe.psum_enable_i)} "
                                             f"en={trace_value(pe.psum_enable_o)} "
+                                            f"select={trace_value(pe.psum_select)} "
                                             f"data={trace_value(pe.psum_data_o)} "
                                             f"used_at_addr={used_bits} "
-                                            + " ".join(addresses) + "]"
+                                            + " ".join(addresses + mac_inputs) + "]"
                                         )
                                     logger.info(
                                         "conv_handshake beat=%d t=%s lane=%d c=(%d,%d) "
