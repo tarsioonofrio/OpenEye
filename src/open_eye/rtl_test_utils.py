@@ -2044,6 +2044,10 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
     except (TypeError, ValueError):
         conv_trace_first, conv_trace_last = -1, -1
         conv_trace_window = ""
+    conv_map_trace = os.environ.get(
+        "OPENEYE_TRACE_CONV_MAP", "0"
+    ).lower() in {"1", "true", "yes", "on"}
+    conv_map_trace_refresh = None
     les.current_position = 0
     conv_feedback_words = []
     conv_feedback_tags = []
@@ -2160,6 +2164,50 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                     ready = int(dut.psum_ready_i.value[output_lane])
                                 except Exception:
                                     ready = "X"
+                                trace_map_lane = conv_map_trace and (
+                                    conv_map_trace_refresh is None
+                                    or refresh_id == conv_map_trace_refresh
+                                )
+                                if trace_map_lane:
+                                    if conv_map_trace_refresh is None:
+                                        conv_map_trace_refresh = refresh_id
+                                    source_rows = []
+                                    cluster = (dut.gen_x[actual_x].gen_y[actual_y]
+                                               .OpenEye_Cluster)
+                                    for pe_row in range(oep.PEs_Y):
+                                        pe = (cluster.pe_cluster.gen_X[router]
+                                              .gen_Y[pe_row].pe)
+                                        addresses = []
+                                        for mac in range(oep.PARALLEL_MACS):
+                                            try:
+                                                addresses.append(int(
+                                                    pe.psum_spad_addr_r[mac].value
+                                                ))
+                                            except Exception:
+                                                addresses.append("X")
+                                        try:
+                                            row_data = int(pe.psum_data_o.value)
+                                        except Exception:
+                                            row_data = "X"
+                                        try:
+                                            row_enable = int(pe.psum_enable_o.value)
+                                        except Exception:
+                                            row_enable = "X"
+                                        try:
+                                            row_state = int(pe.current_state_computing.value)
+                                        except Exception:
+                                            row_state = "X"
+                                        source_rows.append(
+                                            (pe_row, row_state, row_enable, addresses, row_data)
+                                        )
+                                    logger.info(
+                                        "conv_map_source beat=%d refresh=%s refresh_beat=%d "
+                                        "mapped=%s lane=%d cluster=(%d,%d) router=%d "
+                                        "ready=%s packed=%s source_pe_rows=%s",
+                                        captured_beats, refresh_id, refresh_beat,
+                                        map_current_beat, output_lane, actual_x, actual_y,
+                                        router, ready, outputvalue, source_rows,
+                                    )
                                 if trace_conv_beat and ready == 1:
                                     conv_lane_accepts[output_lane] = (
                                         conv_lane_accepts.get(output_lane, 0) + 1
@@ -2414,6 +2462,7 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                                 output_order[layer_repetition]
                                             )):
                                         continue
+                                    map_position = les.current_position
                                     f, x, y = output_order[layer_repetition][les.current_position]
                                     les.current_position = les.current_position + 1
                                     if(logging.DEBUG >= login_level):
@@ -2423,6 +2472,17 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                     value = int(psum_output[word_high:word_shift])
                                     if value >= 2**(oep.DATA_PSUM_BITWIDTH - 1):
                                         value -= 2**oep.DATA_PSUM_BITWIDTH
+                                    if trace_map_lane:
+                                        logger.info(
+                                            "conv_map_assignment beat=%d "
+                                            "refresh=%s refresh_beat=%d "
+                                            "feedback_word=%d lane=%d slot=%d "
+                                            "output_order_index=%d expected=(%d,%d,%d) "
+                                            "value=%d",
+                                            captured_beats, refresh_id, refresh_beat,
+                                            feedback_word_index, output_lane, i,
+                                            map_position, f, x, y, value,
+                                        )
                                     if (psum_trace_word_lines < psum_trace_word_limit
                                             and os.environ.get(
                                                 "OPENEYE_TRACE_PSUM_CAPTURE", "0"
