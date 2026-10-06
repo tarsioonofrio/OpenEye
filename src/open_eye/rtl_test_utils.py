@@ -2045,9 +2045,9 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
             expected_beats = output_groups * beats_per_group
             captured_beats = 0
             for _ in range(_max_wait_cycles()):
-                if captured_beats == expected_beats:
-                    break
                 if _signal_is(dut.psum_enable_o, 0):
+                    if captured_beats == expected_beats:
+                        break
                     await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
                     continue
                 psum_output = dut.psum_data_o.value
