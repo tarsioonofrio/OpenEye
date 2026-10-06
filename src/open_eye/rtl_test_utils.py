@@ -4581,9 +4581,6 @@ async def send_enable_conv(
             context=f" after convolution compute cycle {compute_cycle}",
             dut=dut,
         )
-        await _wait_for_active_pes_idle(
-            ptp, dut, layer_params, oep, "convolution"
-        )
         await _wait_for_signal(
             ptp, dut.start_new_cycle, name="start_new_cycle", expected=0,
             context=" before the next convolution compute cycle", dut=dut,
