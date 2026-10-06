@@ -79,6 +79,7 @@ async def wait_for_parameter_stream_drain(ptp, dut, oep, max_cycles=16):
     lets the activation and weight pipelines finish their registered flush.
     """
     stable_cycles = 0
+    stream_seen = False
     pending = []
     for elapsed in range(1, max_cycles + 1):
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
@@ -97,7 +98,8 @@ async def wait_for_parameter_stream_drain(ptp, dut, oep, max_cycles=16):
                             if stream_enable:
                                 pending.append((cl_x, cl_y, pe_x, pe_y, stream_enable))
 
-        if not pending:
+        stream_seen = stream_seen or bool(pending)
+        if stream_seen and not pending:
             stable_cycles += 1
             if stable_cycles >= 2:
                 logger.info(
