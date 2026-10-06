@@ -73,24 +73,31 @@ async def set_input(port_timings, signal, new_value, multiple_dim=False, array_i
 async def wait_for_parameter_stream_drain(ptp, dut, oep, max_cycles=16):
     """Wait until the PE config stream and its data-pipeline flushes finish.
 
-    OpenEye_Parallel distributes the final three status words through
-    ``enable_stream_reg``. Each PE's activation and weight pipelines then keep
-    a one-cycle ``compute_delay`` to flush their registered input data. A
-    fixed wait measured from the Cocotb coroutine can end before that flush,
-    dropping the first activation/weight beat.
+    The top-level ``enable_stream_reg`` can fall before the final status words
+    have crossed the routers and reached every PE. Wait for each PE's local
+    ``enable_stream_i`` to stay low for two cycles; the extra quiet cycle also
+    lets the activation and weight pipelines finish their registered flush.
     """
     stable_cycles = 0
-    stream_enable = None
+    pending = []
     for elapsed in range(1, max_cycles + 1):
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
-        try:
-            stream_enable = int(dut.enable_stream_reg.value)
-        except (AttributeError, TypeError, ValueError):
-            raise RuntimeError(
-                "OpenEye_Parallel enable_stream_reg is unavailable or unknown"
-            )
+        pending = []
+        for cl_x in range(oep.Clusters_X):
+            for cl_y in range(oep.Clusters_Y):
+                cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+                for pe_x in range(oep.PEs_X):
+                    for pe_y in range(oep.PEs_Y):
+                        pe = cluster.pe_cluster.gen_X[pe_x].gen_Y[pe_y].pe
+                        try:
+                            stream_enable = int(pe.enable_stream_i.value)
+                        except (AttributeError, TypeError, ValueError):
+                            pending.append((cl_x, cl_y, pe_x, pe_y, "unknown"))
+                        else:
+                            if stream_enable:
+                                pending.append((cl_x, cl_y, pe_x, pe_y, stream_enable))
 
-        if stream_enable == 0:
+        if not pending:
             stable_cycles += 1
             if stable_cycles >= 2:
                 logger.info(
@@ -102,9 +109,9 @@ async def wait_for_parameter_stream_drain(ptp, dut, oep, max_cycles=16):
             stable_cycles = 0
 
     raise TimeoutError(
-        "PE configuration stream did not drain within %d cycles "
-        "(enable_stream_reg=%s)"
-        % (max_cycles, stream_enable)
+        "PE configuration stream did not reach all PE inputs within %d cycles "
+        "(pending=%s)"
+        % (max_cycles, pending[:8])
     )
     
 async def reset_all_signals(ptp, dut, serial):
