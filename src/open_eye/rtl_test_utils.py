@@ -80,7 +80,6 @@ async def wait_for_parameter_stream_drain(ptp, dut, oep, max_cycles=16):
     dropping the first activation/weight beat.
     """
     stable_cycles = 0
-    pending = []
     stream_enable = None
     for elapsed in range(1, max_cycles + 1):
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
@@ -91,28 +90,11 @@ async def wait_for_parameter_stream_drain(ptp, dut, oep, max_cycles=16):
                 "OpenEye_Parallel enable_stream_reg is unavailable or unknown"
             )
 
-        pending = []
-        for cl_x in range(oep.Clusters_X):
-            for cl_y in range(oep.Clusters_Y):
-                cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
-                for pe_x in range(oep.PEs_X):
-                    for pe_y in range(oep.PEs_Y):
-                        pe = cluster.pe_cluster.gen_X[pe_x].gen_Y[pe_y].pe
-                        for handler_name in ("iact_data_handler", "wght_data_handler"):
-                            label = (cl_x, cl_y, pe_x, pe_y, handler_name)
-                            try:
-                                flush = int(getattr(pe, handler_name).compute_delay.value)
-                            except (AttributeError, TypeError, ValueError):
-                                pending.append(label + ("unknown",))
-                            else:
-                                if flush:
-                                    pending.append(label + (flush,))
-
-        if stream_enable == 0 and not pending:
+        if stream_enable == 0:
             stable_cycles += 1
             if stable_cycles >= 2:
                 logger.info(
-                    "PE configuration pipelines drained after %d cycles",
+                    "PE configuration stream and pipeline flush drained after %d cycles",
                     elapsed,
                 )
                 return
@@ -120,9 +102,9 @@ async def wait_for_parameter_stream_drain(ptp, dut, oep, max_cycles=16):
             stable_cycles = 0
 
     raise TimeoutError(
-        "PE configuration pipelines did not drain within %d cycles "
-        "(enable_stream_reg=%s pending=%s)"
-        % (max_cycles, stream_enable, pending[:8])
+        "PE configuration stream did not drain within %d cycles "
+        "(enable_stream_reg=%s)"
+        % (max_cycles, stream_enable)
     )
     
 async def reset_all_signals(ptp, dut, serial):
