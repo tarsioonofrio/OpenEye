@@ -68,6 +68,62 @@ async def set_input(port_timings, signal, new_value, multiple_dim=False, array_i
             for current_index in range(len(array_index)):
                 signal = signal[array_index[current_index]]
     signal.value = new_value
+
+
+async def wait_for_parameter_stream_drain(ptp, dut, oep, max_cycles=16):
+    """Wait until the PE config stream and its data-pipeline flushes finish.
+
+    OpenEye_Parallel distributes the final three status words through
+    ``enable_stream_reg``. Each PE's activation and weight pipelines then keep
+    a one-cycle ``compute_delay`` to flush their registered input data. A
+    fixed wait measured from the Cocotb coroutine can end before that flush,
+    dropping the first activation/weight beat.
+    """
+    stable_cycles = 0
+    pending = []
+    stream_enable = None
+    for elapsed in range(1, max_cycles + 1):
+        await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+        try:
+            stream_enable = int(dut.enable_stream_reg.value)
+        except (AttributeError, TypeError, ValueError):
+            raise RuntimeError(
+                "OpenEye_Parallel enable_stream_reg is unavailable or unknown"
+            )
+
+        pending = []
+        for cl_x in range(oep.Clusters_X):
+            for cl_y in range(oep.Clusters_Y):
+                cluster = dut.gen_x[cl_x].gen_y[cl_y].OpenEye_Cluster
+                for pe_x in range(oep.PEs_X):
+                    for pe_y in range(oep.PEs_Y):
+                        pe = cluster.pe_cluster.gen_X[pe_x].gen_Y[pe_y].pe
+                        for handler_name in ("iact_data_handler", "wght_data_handler"):
+                            label = (cl_x, cl_y, pe_x, pe_y, handler_name)
+                            try:
+                                flush = int(getattr(pe, handler_name).compute_delay.value)
+                            except (AttributeError, TypeError, ValueError):
+                                pending.append(label + ("unknown",))
+                            else:
+                                if flush:
+                                    pending.append(label + (flush,))
+
+        if stream_enable == 0 and not pending:
+            stable_cycles += 1
+            if stable_cycles >= 2:
+                logger.info(
+                    "PE configuration pipelines drained after %d cycles",
+                    elapsed,
+                )
+                return
+        else:
+            stable_cycles = 0
+
+    raise TimeoutError(
+        "PE configuration pipelines did not drain within %d cycles "
+        "(enable_stream_reg=%s pending=%s)"
+        % (max_cycles, stream_enable, pending[:8])
+    )
     
 async def reset_all_signals(ptp, dut, serial):
     """Reset all signals of the DUT to known initial state.
