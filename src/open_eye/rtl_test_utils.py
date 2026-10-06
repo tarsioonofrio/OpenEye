@@ -2076,6 +2076,7 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                 / layer_parameters.needed_wght_transmissions
                 / oep.PARALLEL_MACS
             )
+            output_beat_stride = max(1, oep.PARALLEL_MACS)
             expected_beats = output_groups * beats_per_group
             captured_beats = 0
             mapped_beats = 0
@@ -2106,7 +2107,14 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                     refresh_id = -1
                 refresh_beat = conv_refresh_beat_counts.get(refresh_id, 0)
                 conv_refresh_beat_counts[refresh_id] = refresh_beat + 1
-                map_current_beat = refresh_beat < beats_per_group
+                # Parallel MAC PSUMs occupy interleaved addresses. During
+                # SEND_PSUM the PE exposes one address per physical beat, so
+                # only every PARALLEL_MACS-th beat belongs to the next output
+                # pair; the intervening beats are address holes, not outputs.
+                map_current_beat = (
+                    refresh_beat < beats_per_group * output_beat_stride
+                    and refresh_beat % output_beat_stride == 0
+                )
                 feedback_word_index = len(conv_feedback_words)
                 feedback_word_added = False
                 if map_current_beat:
