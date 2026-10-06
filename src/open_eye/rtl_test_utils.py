@@ -2043,11 +2043,40 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                         except Exception:
                                             value = "?"
                                         signals.append(f"{signal_name}={value}")
+                                    pe_rows = []
+                                    for pe_row in range(oep.PEs_Y):
+                                        pe = (cluster.pe_cluster.gen_X[router]
+                                              .gen_Y[pe_row].pe)
+                                        pe_signals = []
+                                        for signal_name in (
+                                            "current_state_computing",
+                                            "psum_data_i", "psum_enable_i",
+                                            "psum_ready_o", "psum_data_o",
+                                            "psum_enable_o", "psum_ready_i",
+                                            "values_valid",
+                                        ):
+                                            try:
+                                                value = str(getattr(
+                                                    pe, signal_name
+                                                ).value)
+                                            except Exception:
+                                                value = "?"
+                                            pe_signals.append(
+                                                f"{signal_name}={value}"
+                                            )
+                                        pe_rows.append(
+                                            f"row={pe_row}["
+                                            + ",".join(pe_signals) + "]"
+                                        )
                                     logger.error(
-                                        "conv_psum cluster=(%d,%d) router=%d "
-                                        "output_lane=%d value=%d %s",
+                                        "conv_psum t=%s valid=%s sample=collector_accept "
+                                        "cluster=(%d,%d) router=%d output_lane=%d "
+                                        "value=%d %s PE_ROWS=%s",
+                                        cocotb.utils.get_sim_time("ns"),
+                                        str(dut.psum_enable_o.value),
                                         actual_x, actual_y, router, output_lane,
                                         outputvalue, " ".join(signals),
+                                        " ".join(pe_rows),
                                     )
                                     psum_trace_lines += 1
                                 if(logging.DEBUG >= login_level and outputvalue is not None):
@@ -2067,7 +2096,12 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                                 "OPENEYE_TRACE_PSUM_CAPTURE", "0"
                                             ).lower() in {"1", "true", "yes", "on"}):
                                         logger.error(
-                                            "conv_psum_word lane=%d slot=%d f=%d x=%d y=%d value=%d",
+                                            "conv_psum_word t=%s sample_index=%d "
+                                            "write_en=1 valid=%s lane=%d slot=%d "
+                                            "f=%d x=%d y=%d value=%d",
+                                            cocotb.utils.get_sim_time("ns"),
+                                            les.current_position - 1,
+                                            str(dut.psum_enable_o.value),
                                             output_lane, i, f, x, y, value,
                                         )
                                         psum_trace_word_lines += 1
