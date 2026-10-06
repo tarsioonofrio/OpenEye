@@ -754,12 +754,9 @@ def calculate_conv_results_mp(f, layer_number, layer_params, serial, dram, calcu
                                     calculated_results[j][i] = int(calculated_results[j][i] + \
                                                                     dram.weights[layer_number][c][f][y + math.floor((layer_params.kernel_size[1]-1)/2)][x + math.floor(layer_params.kernel_size[0]/2)] * \
                                                                     dram.fmap[layer_number][c][x + (j * layer_params.strideX)][y + (i * layer_params.strideY)])
-                                else:
-                                    if (serial) :
-                                        pass
-                                    else:
-                                        calculated_results[j][i] = int(calculated_results[j][i] + \
-                                            dram.weights[layer_number][c][f][x + math.floor(layer_params.kernel_size[0]/2)][y + math.floor((layer_params.kernel_size[1]-1)/2)])
+                                # Keras Conv2D(padding="same") contributes zero
+                                # outside the input tensor. Do not add the kernel
+                                # weight by itself for padded positions.
         return_dict[f] = calculated_results
 
 def compare_dram_with_ref(layer_params, ref_output, dram):
