@@ -1694,10 +1694,7 @@ module PE #(
             for (mac_i = 0; mac_i < PARALLEL_MACS; mac_i=mac_i+1) begin
               psum_spad_addr_w[mac_i] <= psum_spad_addr_r[mac_i];
               adder_en[mac_i]         <= 1;
-              // Parallel MAC results occupy interleaved PSUM slots. Advance
-              // by the MAC stride so each output beat visits the next pair
-              // of addresses instead of overlapping the previous pair.
-              psum_spad_addr_mem[mac_i] <= psum_spad_addr_r[mac_i] + PARALLEL_MACS_ADDR;
+              psum_spad_addr_mem[mac_i] <= psum_spad_addr_r[mac_i] + 1;
               adder_tree_en           <= 1;
               if (used_psum_memory[mac_i][(psum_spad_addr_r[mac_i])] == 1) begin
                 use_psum[mac_i]                               <= 1;
@@ -2089,9 +2086,7 @@ module PE #(
               end
             end
             for (mac_i = 0; mac_i < PARALLEL_MACS; mac_i=mac_i+1) begin
-              // Keep dense-mode output traversal aligned with the interleaved
-              // PSUM addresses written by the parallel MAC lanes.
-              psum_spad_addr_mem[mac_i] <= psum_spad_addr_r[mac_i] + PARALLEL_MACS_ADDR;
+              psum_spad_addr_mem[mac_i] <= psum_spad_addr_r[mac_i] + 1;
               adder_tree_en              <= 1;
               if (used_psum_memory[mac_i][(psum_spad_addr_r[mac_i])] == 1) begin
                 use_psum[mac_i]                                  <= 1;
