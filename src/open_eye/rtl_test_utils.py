@@ -2198,11 +2198,25 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                             f"used_at_addr={used_bits} "
                                             + " ".join(addresses + mac_inputs) + "]"
                                         )
+                                    try:
+                                        feedback_request = int(
+                                            dut.psum_enable_i.value[output_lane]
+                                        )
+                                    except Exception:
+                                        feedback_request = "X"
+                                    try:
+                                        feedback_input = int(
+                                            dut.psum_data_i.value[
+                                                upper_limit - 1:lower_limit
+                                            ]
+                                        )
+                                    except Exception:
+                                        feedback_input = "X"
                                     logger.info(
                                         "conv_handshake beat=%d t=%s lane=%d c=(%d,%d) "
                                         "valid=%s ready=%s data=%s top=(finished=%s needed=%s "
                                         "new_cycle=%s compute_cluster=%s transmitted=%s "
-                                        "request=%s) PE=%s",
+                                        "request=%s feedback=(request=%s input=%s words=%d)) PE=%s",
                                         captured_beats,
                                         cocotb.utils.get_sim_time("ns"), output_lane,
                                         actual_x, actual_y, trace_value(dut.psum_enable_o),
@@ -2213,6 +2227,8 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                         trace_value(dut.compute_cluster_i_reg),
                                         trace_value(dut.psum_transmitted_i),
                                         trace_value(dut.psum_enable_i),
+                                        feedback_request, feedback_input,
+                                        len(conv_feedback_words),
                                         " ".join(pe_rows),
                                     )
                                 if (outputvalue is not None and psum_trace_lines < 32
