@@ -265,13 +265,13 @@ async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, la
         "1", "true", "yes", "on"
     }:
         rtl_test_utils.trace_active_pe_input_counts(dut, lp, oep)
-    # The FPGA PSUM controller raises this during its ready phase, then lowers
-    # it while transferring/capturing PSUMs. The direct convolution test now
-    # reproduces that handshake once per compute cycle in send_enable_conv.
+    # OpenEye_Parallel waits for the external PSUM controller to announce that
+    # the bias/partial-sum transfer is complete before advancing a compute
+    # cycle. The FPGA wrapper normally drives this from psum_pipeline; this
+    # direct-core testbench must provide the same handshake itself.
     if hasattr(dut, "psum_transmitted_i"):
         cocotb.start_soon(rtl_test_utils.set_input(
-            ptp, dut.psum_transmitted_i,
-            0 if "Conv" in str(layer) and lp.used_Y_cluster == 1 else 1
+            ptp, dut.psum_transmitted_i, 1
         ))
     cocotb.start_soon(rtl_test_utils.set_input(ptp, dut.compute_i, 1))
     await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
