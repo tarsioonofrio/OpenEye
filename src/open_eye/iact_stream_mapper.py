@@ -799,7 +799,11 @@ class ConvIactStreamMapper(IactStreamMapper):
                             spad_storage[words_in_storage][0] = 0
 
                     else:
-                        spad_storage[words_in_storage][0] = 1
+                        # Padding must be a true zero in both dense and sparse
+                        # activation streams. In dense mode the PE multiplies
+                        # every payload; in sparse mode set_sparse_stream()
+                        # removes zero-valued entries before transmission.
+                        spad_storage[words_in_storage][0] = 0
                     spad_storage[words_in_storage][1] = overhead_counter
                     overhead_counter = overhead_counter + 1
 
