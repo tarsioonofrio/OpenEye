@@ -2032,20 +2032,44 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
     except ValueError:
         psum_trace_word_limit = 32
     les.current_position = 0
+    conv_feedback_words = []
     if(logging.DEBUG >= login_level):
         storage_file.write(" f_corner_start: " + str(les.f_corner_start) + " y_corner_start: " + str(les.y_corner_start) + " x_corner_start: " + str(les.x_corner_start) + "\n")
     if (oep.SERIAL == 0) :
         if ((layer_repetition % layer_parameters.iact_transmissions_pe) == (layer_parameters.iact_transmissions_pe - 1)):
-            cocotb.start_soon(send_enable_conv(ptp, dut, layer_parameters, layer_repetition, oep))
+            cocotb.start_soon(send_enable_conv(
+                ptp, dut, layer_parameters, layer_repetition, oep,
+                feedback_words=conv_feedback_words,
+            ))
             await _wait_for_signal(
                 ptp, dut.psum_enable_o, name="psum_enable_o",
                 context=" before convolution output", dut=dut,
             )
             dut._log.info("Output Stream started")
-            assert dut.psum_enable_o.value != 0, "psum is not 1!"
+            compute_cycles = int(
+                layer_parameters.needed_refreshes_mx[layer_repetition][0]
+            )
+            output_groups = math.ceil(
+                compute_cycles / max(layer_parameters.used_Y_cluster, 1)
+            )
+            beats_per_group = math.ceil(
+                layer_parameters.filters
+                / layer_parameters.needed_wght_transmissions
+                / oep.PARALLEL_MACS
+            )
+            expected_beats = output_groups * beats_per_group
+            captured_beats = 0
             for _ in range(_max_wait_cycles()):
                 if _signal_is(dut.psum_enable_o, 0):
-                    break
+                    if captured_beats == expected_beats:
+                        break
+                    await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+                    continue
+                try:
+                    conv_feedback_words.append(int(dut.psum_data_o.value))
+                except ValueError:
+                    pass
+                captured_beats += 1
                 cluster_order = []
                 for a in range(layer_parameters.used_Y_cluster):
                     for b in range(0,oep.Clusters_Y,layer_parameters.used_Y_cluster):
@@ -2156,8 +2180,14 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                 await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
             else:
                 raise TimeoutError(
-                    "psum_enable_o remained asserted while collecting convolution "
-                    f"output{_fsm_state_note(dut)}"
+                    "Timed out collecting convolution PSUM handshakes: "
+                    f"captured {captured_beats}/{expected_beats} beats; "
+                    f"{_fsm_state_note(dut)}"
+                )
+            if captured_beats != expected_beats:
+                raise AssertionError(
+                    "Convolution PSUM transfer ended after "
+                    f"{captured_beats}/{expected_beats} valid beats"
                 )
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
         cocotb.start_soon(set_input(ptp,(dut.psum_enable_i), 0))
@@ -4437,7 +4467,9 @@ async def compare_stream_Pooling(ptp, dut, layer_number, layer_repetition, layer
         logger.debug("f: " + str(f) + "\n")
     pass
 
-async def send_enable_conv(ptp, dut, layer_params, layer_repetition, oep):
+async def send_enable_conv(
+    ptp, dut, layer_params, layer_repetition, oep, feedback_words=None
+):
     """Send enable signals for convolution layer operation.
     
     This function manages the enable signal timing for convolutional layer
@@ -4458,29 +4490,110 @@ async def send_enable_conv(ptp, dut, layer_params, layer_repetition, oep):
         - Handles proper synchronization of enable signals
         - Manages timing for multiple processing cycles
     """
-    # Requesting output while a PE is still IDLE or calculating can make its
-    # FSM enter SEND_PSUM before the new partial sum is written.
-    await _wait_for_active_pes_ready(
-        ptp, dut, layer_params, oep, "convolution"
+    if layer_params.used_Y_cluster != 1:
+        # Keep the existing timing path for grouped cluster-row schedules.
+        await _wait_for_active_pes_ready(
+            ptp, dut, layer_params, oep, "convolution"
+        )
+        mask = (1 << (oep.Clusters_X * oep.Clusters_Y * oep.NUM_GLB_PSUM)) - 1
+        cocotb.start_soon(set_input(ptp, dut.psum_enable_i, mask))
+        beats = math.ceil(
+            layer_params.filters / layer_params.needed_wght_transmissions
+            / oep.PARALLEL_MACS
+        ) * math.ceil(
+            layer_params.needed_refreshes_mx[layer_repetition][0]
+            / layer_params.used_Y_cluster
+        )
+        for _ in range(beats):
+            await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+        cocotb.start_soon(set_input(ptp, dut.psum_enable_i, 0))
+        return
+
+    if feedback_words is None:
+        feedback_words = []
+    compute_cycles = int(
+        layer_params.needed_refreshes_mx[layer_repetition][0]
     )
-    cocotb.start_soon(set_input(ptp,(dut.psum_enable_i), (2**(oep.Clusters_X*oep.Clusters_Y*oep.NUM_GLB_PSUM))-1))
+    beats_per_cycle = math.ceil(
+        layer_params.filters
+        / layer_params.needed_wght_transmissions
+        / oep.PARALLEL_MACS
+    )
+    mask = (1 << (oep.Clusters_X * oep.Clusters_Y * oep.NUM_GLB_PSUM)) - 1
 
+    for compute_cycle in range(compute_cycles):
+        # A high ready phase advances the top-level scheduler once. Lowering it
+        # rearms start_new_cycle while the PEs calculate and transfer PSUMs.
+        cocotb.start_soon(set_input(ptp, dut.psum_transmitted_i, 1))
+        await _wait_for_signal(
+            ptp, dut.compute_cluster_i_reg,
+            name="compute_cluster_i_reg",
+            context=f" during convolution compute cycle {compute_cycle}",
+            dut=dut,
+        )
+        cocotb.start_soon(set_input(ptp, dut.psum_transmitted_i, 0))
+        await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
 
-            
-    match layer_params.single_cluster_computation:
-        case 1:
-            for _ in range(int((math.ceil((layer_params.filters*layer_params.output_shape[1]*layer_params.output_shape[2])/2/(oep.Clusters_X*oep.Clusters_Y*oep.NUM_GLB_PSUM))))):
+        await _wait_for_active_pes_ready(
+            ptp, dut, layer_params, oep, "convolution"
+        )
+        await _wait_for_signal(
+            ptp, dut.psum_enable_o, name="psum_enable_o", expected=0,
+            context=" before the next convolution PSUM burst", dut=dut,
+        )
+
+        previous_start = (compute_cycle - 1) * beats_per_cycle
+        previous_psums = (
+            feedback_words[previous_start:previous_start + beats_per_cycle]
+            if compute_cycle > 0 else []
+        )
+        if compute_cycle > 0 and len(previous_psums) != beats_per_cycle:
+            raise RuntimeError(
+                "Convolution PSUM feedback is incomplete before compute "
+                f"cycle {compute_cycle}: got {len(previous_psums)} of "
+                f"{beats_per_cycle} beats"
+            )
+
+        await _wait_for_signal(
+            ptp, dut.psum_ready_o, name="psum_ready_o",
+            context=" before convolution PSUM transfer", dut=dut,
+        )
+        output_start = len(feedback_words)
+        cocotb.start_soon(set_input(ptp, dut.psum_enable_i, mask))
+        for beat in range(beats_per_cycle):
+            input_data = previous_psums[beat] if previous_psums else 0
+            cocotb.start_soon(set_input(ptp, dut.psum_data_i, input_data))
+            for _ in range(_max_wait_cycles()):
+                if len(feedback_words) >= output_start + beat + 1:
+                    break
                 await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
-        case 2:
-            for _ in range(int((math.ceil((layer_params.filters*layer_params.output_shape[1]*layer_params.output_shape[2])/(2*oep.Clusters_X*oep.Clusters_Y*oep.NUM_GLB_PSUM))))):
-                await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
-        case _:
-            for _ in range(int((math.ceil(layer_params.filters/layer_params.needed_wght_transmissions/2)*\
-                                math.ceil(layer_params.needed_refreshes_mx[layer_repetition][0]/layer_params.used_Y_cluster)))):
-                await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+            else:
+                raise TimeoutError(
+                    "Convolution PSUM output did not handshake for compute "
+                    f"cycle {compute_cycle}, beat {beat}; "
+                    f"{_fsm_state_note(dut)}"
+                )
 
+        cocotb.start_soon(set_input(ptp, dut.psum_enable_i, 0))
+        cocotb.start_soon(set_input(ptp, dut.psum_data_i, 0))
+        await _wait_for_signal(
+            ptp, dut.psum_enable_o, name="psum_enable_o", expected=0,
+            context=f" after convolution compute cycle {compute_cycle}",
+            dut=dut,
+        )
+        await _wait_for_active_pes_idle(
+            ptp, dut, layer_params, oep, "convolution"
+        )
+        await _wait_for_signal(
+            ptp, dut.start_new_cycle, name="start_new_cycle", expected=0,
+            context=" before the next convolution compute cycle", dut=dut,
+        )
 
-    cocotb.start_soon(set_input(ptp,(dut.psum_enable_i), 0))
+    await _wait_for_signal(
+        ptp, dut.finished_cycles, name="finished_cycles",
+        expected=compute_cycles,
+        context=" after convolution compute schedule", dut=dut,
+    )
 
 async def send_enable_dw(ptp, dut, layer_params, layer_repetition, oep):
     """Send enable signals for depthwise convolution layer operation.
