@@ -2660,6 +2660,10 @@ async def trace_pe_wght_writes(ptp, dut, oep):
     except Exception as exc:
         wa = None
         logger.info("pw: weight addr SPad not reachable (%s)", type(exc).__name__)
+    try:
+        wh = pe.wght_data_handler
+    except Exception:
+        wh = None
     lines = 0
     last_state = None
     last_psum = None
@@ -2799,9 +2803,15 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                         val(pe.enable_stream_i))
             lines += 1
         if val(pe.wght_enable_i) not in (None, 0):
-            logger.info("pw t=%s WGHT ingress en=%s data=%s ready=%s",
+            logger.info("pw t=%s WGHT ingress en=%s data=%s ready=%s "
+                        "stream=%s compute=%s pipe_enable_delay=%s "
+                        "pipe_compute_delay=%s pipe_compute_sent=%s",
                         now, val(pe.wght_enable_i), raw(pe.wght_data_i),
-                        val(pe.wght_ready_o))
+                        val(pe.wght_ready_o), val(pe.enable_stream_i),
+                        val(pe.compute_i),
+                        val(wh.enable_delay) if wh is not None else None,
+                        val(wh.compute_delay) if wh is not None else None,
+                        val(wh.compute_sent) if wh is not None else None)
             lines += 1
         if val(pe.iact_enable_i) not in (None, 0):
             cluster = dut.gen_x[cx].gen_y[cy]
@@ -2836,8 +2846,19 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                         payload -= 1 << oep.WGHT_Bitwidth
                     overhead = word >> oep.WGHT_Bitwidth
                     lanes.append((payload, overhead))
-            logger.info("pw t=%s W addr=%s data=%s lanes=%s",
-                        now, val(ws.addr_i), None if d is None else hex(d), lanes)
+            logger.info("pw t=%s W addr=%s data=%s lanes=%s "
+                        "in=%s stream=%s compute=%s pipe_enable_delay=%s "
+                        "pipe_compute_delay=%s pipe_compute_sent=%s "
+                        "pipe_data=%s pipe_addr=%s pipe_we=%s",
+                        now, val(ws.addr_i), None if d is None else hex(d), lanes,
+                        raw(pe.wght_data_i), val(pe.enable_stream_i),
+                        val(pe.compute_i),
+                        val(wh.enable_delay) if wh is not None else None,
+                        val(wh.compute_delay) if wh is not None else None,
+                        val(wh.compute_sent) if wh is not None else None,
+                        raw(wh.data_storage_2) if wh is not None else None,
+                        val(wh.second_spad_addr_o) if wh is not None else None,
+                        val(wh.second_spad_en_o) if wh is not None else None)
             lines += 1
         if val(isp.we_i) == 1:
             d = val(isp.data_i)
