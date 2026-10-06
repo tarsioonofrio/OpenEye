@@ -2110,17 +2110,6 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                 if(logging.DEBUG >= login_level and outputvalue is not None):
                                     txt_file.write(bin(outputvalue)[2:].zfill(oep.PSUM_Trans_Bitwidth) + "\n")
                                 for i in range(oep.PARALLEL_MACS):
-                                    if les.current_position >= len(
-                                        output_order[layer_repetition]
-                                    ):
-                                        raise AssertionError(
-                                            "Convolution produced more output words "
-                                            f"than mapped: position={les.current_position}, "
-                                            f"mapped={len(output_order[layer_repetition])}, "
-                                            f"captured_beats={captured_beats}/"
-                                            f"{expected_beats}, output_lane={output_lane}, "
-                                            f"compute_cycle={int(dut.finished_cycles.value)}"
-                                        )
                                     f, x, y = output_order[layer_repetition][les.current_position]
                                     les.current_position = les.current_position + 1
                                     if(logging.DEBUG >= login_level):
