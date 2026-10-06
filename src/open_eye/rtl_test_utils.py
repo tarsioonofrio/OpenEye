@@ -2043,6 +2043,7 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
             conv_trace_first, conv_trace_last = -1, -1
     except (TypeError, ValueError):
         conv_trace_first, conv_trace_last = -1, -1
+        conv_trace_window = ""
     les.current_position = 0
     conv_feedback_words = []
     if(logging.DEBUG >= login_level):
@@ -2071,12 +2072,25 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
             )
             expected_beats = output_groups * beats_per_group
             captured_beats = 0
+            trace_low_valid_cycles = 0
             for _ in range(_max_wait_cycles()):
                 if _signal_is(dut.psum_enable_o, 0):
-                    if captured_beats == expected_beats:
+                    if captured_beats == expected_beats and not conv_trace_window:
                         break
+                    if conv_trace_window and captured_beats > expected_beats:
+                        try:
+                            finished = int(dut.finished_cycles.value)
+                        except Exception:
+                            finished = -1
+                        if finished >= compute_cycles:
+                            trace_low_valid_cycles += 1
+                            if trace_low_valid_cycles >= 4:
+                                break
+                        else:
+                            trace_low_valid_cycles = 0
                     await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
                     continue
+                trace_low_valid_cycles = 0
                 try:
                     conv_feedback_words.append(int(dut.psum_data_o.value))
                 except ValueError:
@@ -2218,6 +2232,11 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                 if(logging.DEBUG >= login_level and outputvalue is not None):
                                     txt_file.write(bin(outputvalue)[2:].zfill(oep.PSUM_Trans_Bitwidth) + "\n")
                                 for i in range(oep.PARALLEL_MACS):
+                                    if (conv_trace_window
+                                            and les.current_position >= len(
+                                                output_order[layer_repetition]
+                                            )):
+                                        continue
                                     f, x, y = output_order[layer_repetition][les.current_position]
                                     les.current_position = les.current_position + 1
                                     if(logging.DEBUG >= login_level):
