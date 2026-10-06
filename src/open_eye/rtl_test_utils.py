@@ -2304,10 +2304,15 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                         sorted(conv_lane_accepts.items()),
                         _signal_note(dut, ("finished_cycles", "needed_cycles_i_reg")),
                     )
-                raise AssertionError(
-                    "Convolution PSUM transfer ended after "
-                    f"{captured_beats}/{expected_beats} valid beats"
-                )
+                    logger.warning(
+                        "Diagnostic trace mode: continuing to the DRAM/reference "
+                        "comparison after the convolution stream-length mismatch"
+                    )
+                else:
+                    raise AssertionError(
+                        "Convolution PSUM transfer ended after "
+                        f"{captured_beats}/{expected_beats} valid beats"
+                    )
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
         cocotb.start_soon(set_input(ptp,(dut.psum_enable_i), 0))
         dut._log.info("Output Stream finished")
