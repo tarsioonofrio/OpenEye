@@ -1080,9 +1080,13 @@ module PE #(
         end else begin
           psum_enable <= 0;
         end
+        // Parallel adders each slice their lane from this packed bus later;
+        // keep the complete word in every delay entry. Serial mode consumes
+        // only entry 0 and retains its single-entry behavior.
         for (mac_i = 0; mac_i < PARALLEL_MACS; mac_i=mac_i+1) begin
-          psum_data_delay[mac_i] <= 0;
-          if (mac_i == 0) begin
+          if (SERIAL == 1 && mac_i != 0) begin
+            psum_data_delay[mac_i] <= 0;
+          end else begin
             psum_data_delay[mac_i] <= psum_data_i;
           end
         end
@@ -1770,11 +1774,12 @@ module PE #(
         end else begin
           psum_enable <= 0;
         end
+        // Keep both packed PSUM lanes available to the parallel input mux.
         for (mac_i = 0; mac_i < PARALLEL_MACS; mac_i=mac_i+1) begin
-          if (mac_i == 0) begin
-            psum_data_delay[mac_i] <= psum_data_i;
-          end else begin
+          if (SERIAL == 1 && mac_i != 0) begin
             psum_data_delay[mac_i] <= 0;
+          end else begin
+            psum_data_delay[mac_i] <= psum_data_i;
           end
         end
         if (SERIAL == 1) begin
