@@ -24,7 +24,7 @@ import math
 import cocotb
 import numpy as np
 import open_eye.iact_stream_mapper as iact_stream_mapper
-from cocotb.triggers import FallingEdge, RisingEdge, Timer
+from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge, Timer
 import open_eye.stream_dicts as strdic
 import random
 
@@ -2046,6 +2046,7 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
         conv_trace_window = ""
     les.current_position = 0
     conv_feedback_words = []
+    conv_feedback_tags = []
     if(logging.DEBUG >= login_level):
         storage_file.write(" f_corner_start: " + str(les.f_corner_start) + " y_corner_start: " + str(les.y_corner_start) + " x_corner_start: " + str(les.x_corner_start) + "\n")
     if (oep.SERIAL == 0) :
@@ -2053,6 +2054,7 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
             cocotb.start_soon(send_enable_conv(
                 ptp, dut, layer_parameters, layer_repetition, oep,
                 feedback_words=conv_feedback_words,
+                feedback_tags=conv_feedback_tags,
             ))
             await _wait_for_signal(
                 ptp, dut.psum_enable_o, name="psum_enable_o",
@@ -2092,14 +2094,33 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                     await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
                     continue
                 trace_low_valid_cycles = 0
+                feedback_word_index = len(conv_feedback_words)
+                feedback_word_added = False
                 try:
                     conv_feedback_words.append(int(dut.psum_data_o.value))
+                    feedback_word_added = True
                 except ValueError:
                     pass
                 captured_beats += 1
                 trace_conv_beat = (
                     conv_trace_first <= captured_beats <= conv_trace_last
                 )
+                trace_roundtrip = os.environ.get(
+                    "OPENEYE_TRACE_CONV_ROUNDTRIP", "0"
+                ).lower() in {"1", "true", "yes", "on"}
+                feedback_tag = {
+                    "beat": captured_beats,
+                    "time": str(cocotb.utils.get_sim_time("ns")),
+                    "refresh": None,
+                    "lanes": {},
+                }
+                if feedback_word_added:
+                    conv_feedback_tags.append(feedback_tag)
+                if trace_roundtrip:
+                    try:
+                        feedback_tag["refresh"] = int(dut.finished_cycles.value)
+                    except Exception:
+                        pass
                 cluster_order = []
                 for a in range(layer_parameters.used_Y_cluster):
                     for b in range(0,oep.Clusters_Y,layer_parameters.used_Y_cluster):
@@ -2135,6 +2156,88 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                     conv_lane_accepts[output_lane] = (
                                         conv_lane_accepts.get(output_lane, 0) + 1
                                     )
+                                if trace_roundtrip and output_lane in (0, 31):
+                                    pe_chain = []
+                                    top_slots = []
+                                    if isinstance(outputvalue, int):
+                                        for mac in range(oep.PARALLEL_MACS):
+                                            shift = oep.DATA_PSUM_BITWIDTH * (
+                                                oep.PARALLEL_MACS - 1 - mac
+                                            )
+                                            slot_value = (
+                                                outputvalue >> shift
+                                            ) & ((1 << oep.DATA_PSUM_BITWIDTH) - 1)
+                                            if slot_value >= (
+                                                1 << (oep.DATA_PSUM_BITWIDTH - 1)
+                                            ):
+                                                slot_value -= 1 << oep.DATA_PSUM_BITWIDTH
+                                            top_slots.append(slot_value)
+                                    cluster = (dut.gen_x[actual_x].gen_y[actual_y]
+                                               .OpenEye_Cluster)
+                                    for pe_row in range(oep.PEs_Y):
+                                        pe = (cluster.pe_cluster.gen_X[router]
+                                              .gen_Y[pe_row].pe)
+                                        addr = []
+                                        for mac in range(oep.PARALLEL_MACS):
+                                            try:
+                                                addr.append(int(
+                                                    pe.psum_spad_addr_r[mac].value
+                                                ))
+                                            except Exception:
+                                                addr.append("X")
+                                        try:
+                                            row_data = int(pe.psum_data_o.value)
+                                        except Exception:
+                                            row_data = "X"
+                                        try:
+                                            row_enable = int(pe.psum_enable_o.value)
+                                        except Exception:
+                                            row_enable = "X"
+                                        try:
+                                            row_state = int(
+                                                pe.current_state_computing.value
+                                            )
+                                        except Exception:
+                                            row_state = "X"
+                                        row_slots = []
+                                        if isinstance(row_data, int):
+                                            for mac in range(oep.PARALLEL_MACS):
+                                                shift = oep.DATA_PSUM_BITWIDTH * (
+                                                    oep.PARALLEL_MACS - 1 - mac
+                                                )
+                                                slot_value = (
+                                                    row_data >> shift
+                                                ) & ((1 << oep.DATA_PSUM_BITWIDTH) - 1)
+                                                if slot_value >= (
+                                                    1 << (oep.DATA_PSUM_BITWIDTH - 1)
+                                                ):
+                                                    slot_value -= 1 << oep.DATA_PSUM_BITWIDTH
+                                                row_slots.append(slot_value)
+                                        pe_chain.append(
+                                            (pe_row, row_state, row_enable,
+                                             list(zip(addr, row_slots)))
+                                        )
+                                    feedback_tag["lanes"][output_lane] = {
+                                        "ready": ready,
+                                        "packed_value": outputvalue,
+                                        "slots_by_mac": list(zip(
+                                            [entry[0] for entry in pe_chain[0][3]],
+                                            top_slots,
+                                        )) if pe_chain and top_slots else [],
+                                        "pe_chain": pe_chain,
+                                    }
+                                    if trace_conv_beat:
+                                        logger.info(
+                                            "conv_roundtrip_source word=%d beat=%d t=%s "
+                                            "refresh=%s lane=%d ready=%s value=%s "
+                                            "slots_by_mac=%s pe_chain=%s",
+                                            feedback_word_index, captured_beats,
+                                            feedback_tag["time"],
+                                            feedback_tag["refresh"], output_lane,
+                                            ready, outputvalue,
+                                            feedback_tag["lanes"][output_lane]["slots_by_mac"],
+                                            pe_chain,
+                                        )
                                 if trace_conv_beat and output_lane in (0, 31):
                                     cluster = (dut.gen_x[actual_x].gen_y[actual_y]
                                                .OpenEye_Cluster)
@@ -4627,8 +4730,60 @@ async def compare_stream_Pooling(ptp, dut, layer_number, layer_repetition, layer
         logger.debug("f: " + str(f) + "\n")
     pass
 
+async def _trace_conv_feedback_capture(
+    dut, oep, compute_cycle, beat, feedback_index, selected_word
+):
+    """Trace a selected feedback word through the registered top-level input."""
+    try:
+        cluster = dut.gen_x[0].gen_y[0].OpenEye_Cluster
+        pe = (cluster.pe_cluster.gen_X[0]
+              .gen_Y[oep.PEs_Y - 1].pe)
+    except Exception:
+        cluster = None
+        pe = None
+
+    for edge in (1, 2):
+        await RisingEdge(dut.clk_i)
+        await ReadOnly()
+        def value(signal):
+            try:
+                return int(signal.value)
+            except Exception:
+                return "X"
+
+        top_enable = value(dut.psum_enable_i_reg)
+        top_data = value(dut.psum_data_i_reg)
+        top_lane_enable = (top_enable & 1) if isinstance(top_enable, int) else "X"
+        top_lane_data = (
+            top_data & ((1 << oep.PSUM_Trans_Bitwidth) - 1)
+            if isinstance(top_data, int) else "X"
+        )
+        if pe is None:
+            pe_input = pe_enable = pe_ready = pe_state = pe_addr = "X"
+        else:
+            pe_input = value(pe.psum_data_i)
+            pe_enable = value(pe.psum_enable_i)
+            pe_ready = value(pe.psum_ready_o)
+            pe_state = value(pe.current_state_computing)
+            try:
+                pe_addr = [value(pe.psum_spad_addr_r[i])
+                           for i in range(oep.PARALLEL_MACS)]
+            except Exception:
+                pe_addr = "X"
+        logger.info(
+            "conv_roundtrip_capture cycle=%d beat=%d word=%d edge=%d t=%s "
+            "selected=%s top_reg=(enable=%s data=%s) "
+            "bottom_pe=(enable=%s data=%s ready=%s state=%s addr=%s)",
+            compute_cycle, beat, feedback_index, edge,
+            cocotb.utils.get_sim_time("ns"), selected_word,
+            top_lane_enable, top_lane_data, pe_enable, pe_input, pe_ready,
+            pe_state, pe_addr,
+        )
+
+
 async def send_enable_conv(
-    ptp, dut, layer_params, layer_repetition, oep, feedback_words=None
+    ptp, dut, layer_params, layer_repetition, oep, feedback_words=None,
+    feedback_tags=None,
 ):
     """Send enable signals for convolution layer operation.
     
@@ -4671,6 +4826,11 @@ async def send_enable_conv(
 
     if feedback_words is None:
         feedback_words = []
+    if feedback_tags is None:
+        feedback_tags = []
+    trace_roundtrip = os.environ.get(
+        "OPENEYE_TRACE_CONV_ROUNDTRIP", "0"
+    ).lower() in {"1", "true", "yes", "on"}
     compute_cycles = int(
         layer_params.needed_refreshes_mx[layer_repetition][0]
     )
@@ -4713,6 +4873,18 @@ async def send_enable_conv(
                 f"cycle {compute_cycle}: got {len(previous_psums)} of "
                 f"{beats_per_cycle} beats"
             )
+        if trace_roundtrip and compute_cycle > 0:
+            for beat, selected_word in enumerate(previous_psums):
+                feedback_index = previous_start + beat
+                source = (feedback_tags[feedback_index]
+                          if feedback_index < len(feedback_tags) else None)
+                logger.info(
+                    "conv_roundtrip_select cycle=%d beat=%d word=%d source=%s "
+                    "selected_lane0=%s selected_word=%s",
+                    compute_cycle, beat, feedback_index, source,
+                    (selected_word & ((1 << oep.PSUM_Trans_Bitwidth) - 1)),
+                    selected_word,
+                )
 
         await _wait_for_signal(
             ptp, dut.psum_ready_o, name="psum_ready_o",
@@ -4723,6 +4895,12 @@ async def send_enable_conv(
         for beat in range(beats_per_cycle):
             input_data = previous_psums[beat] if previous_psums else 0
             cocotb.start_soon(set_input(ptp, dut.psum_data_i, input_data))
+            if trace_roundtrip:
+                cocotb.start_soon(_trace_conv_feedback_capture(
+                    dut, oep, compute_cycle, beat,
+                    previous_start + beat if previous_psums else -1,
+                    input_data,
+                ))
             for _ in range(_max_wait_cycles()):
                 if len(feedback_words) >= output_start + beat + 1:
                     break
