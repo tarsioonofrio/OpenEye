@@ -2753,6 +2753,24 @@ async def trace_pe_wght_writes(ptp, dut, oep):
                             now, *psum_signature)
                 last_psum = psum_signature
                 lines += 1
+        if state == 8:
+            logger.info(
+                "pw t=%s SEND_PSUM spad_addr=%s spad_data0=%s spad_data1=%s "
+                "psum_in=%s in_en=%s psum_out=%s out_en=%s ready_i=%s "
+                "ready_o=%s select=%s",
+                now,
+                val(pe.psum_spad_addr_r[0]),
+                raw(pe.psum_spad_data_i[0]),
+                raw(pe.psum_spad_data_i[1]),
+                raw(pe.psum_data_i),
+                raw(pe.psum_enable_i),
+                raw(pe.psum_data_o),
+                raw(pe.psum_enable_o),
+                raw(pe.psum_ready_i),
+                raw(pe.psum_ready_o),
+                val(pe.psum_select),
+            )
+            lines += 1
         if wa is not None and val(wa.we_i) == 1:
             logger.info("pw t=%s WA addr=%s data=%s", now, val(wa.addr_i), val(wa.data_i))
             lines += 1
