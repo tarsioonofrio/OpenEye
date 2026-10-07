@@ -12,7 +12,7 @@ HDL = ROOT / "hdl"
 
 def test_openeye_cluster_conv_reproducer(tmp_path):
     sources = [
-        "OpenEye_Cluster.v", "GLB_cluster.v", "af_cluster.v", "bano_cluster.v",
+        "OpenEye_Cluster.v", "GLB_cluster.v", "af_cluster.v",
         "delay_cluster.v", "router_iact.v", "router_wght.v", "router_psum.v",
         "PE_cluster.v", "PE.v", "adder.v", "adder_tree.v", "data_pipeline.v",
         "data_pipeline_iact.v", "data_pipeline_wght.v", "dsp_unit.v",
