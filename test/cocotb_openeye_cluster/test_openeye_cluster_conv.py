@@ -51,6 +51,10 @@ def test_openeye_cluster_conv_reproducer(tmp_path):
         extra_env={
             "CLOCK_LEN": "10",
             "CLOCK_UNIT": "ns",
+            "CLOCK_DELAY_INPUT": "100",
+            "CLOCK_DELAY_UNIT_INPUT": "ps",
+            "CLOCK_DELAY_OUTPUT": "100",
+            "CLOCK_DELAY_UNIT_OUTPUT": "ps",
             "IACTSIZE_X": "2",
             "IACTSIZE_Y": "2",
             "WGHTSIZE_X": "6",
