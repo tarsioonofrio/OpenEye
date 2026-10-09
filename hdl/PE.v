@@ -1375,8 +1375,13 @@ module PE #(
             // ================================================================
             // BLOCK 1b: WEIGHT VECTOR INCREMENT
             // ================================================================
-            // Advance through weight data for current activation
-            if (wght_data_vec < (second_spad_words_wght - 1)) begin
+            // Advance through weight data for current activation.
+            // The index may also advance up to the range end (wght_data_end),
+            // which can be one past the last SPAD word (words-1). Without that,
+            // a range ending on the last word stalled at index words-1 for an
+            // extra cycle, multiplying the same weight twice (the second MAC
+            // landed at an offset psum address and was accumulated).
+            if ((wght_data_vec < (second_spad_words_wght - 1)) || (wght_data_vec < wght_data_end)) begin
               wght_data_vec <= wght_data_vec + 1; // Increment weight index
             end else begin
               mux_iact_ready <= 1;                 // Signal ready for next activation
