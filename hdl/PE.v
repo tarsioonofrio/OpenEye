@@ -488,7 +488,7 @@ module PE #(
     // local parameters
     localparam integer IACT_WORDWIDTH_SINGLE = SPARSITY_EN == 1 ? (DATA_IACT_BITWIDTH + DATA_IACT_OVERHEAD) : DATA_IACT_BITWIDTH,
     localparam integer WGHT_WORDWIDTH_SINGLE = SPARSITY_EN == 1 ? (DATA_WGHT_BITWIDTH + DATA_WGHT_IGNORE_ZEROS) : DATA_WGHT_BITWIDTH,
-    localparam integer IACT_ADDR_DATA = $clog2(IACT_DATA_ADDR),
+    localparam integer IACT_ADDR_DATA = $clog2(IACT_DATA_ADDR + 1),
     localparam integer WGHT_ADDR_DATA = $clog2(WGHT_DATA_ADDR),
     localparam integer IACT_DATA_WORDS_BITWIDTH = $clog2(IACT_DATA_ADDR + 1),
 
