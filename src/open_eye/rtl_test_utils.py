@@ -2574,19 +2574,25 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
         x_repetitions = layer_parameters.iact_x_line_repetitions
         x_block_width = layer_parameters.iact_x_add_up // max(x_repetitions, 1)
         x_block_base = 0
-        compute_cycles = int(
-            layer_parameters.needed_refreshes_mx[layer_repetition][0]
+        # psum_transmitted_i is a top-level input only on OpenEye_Parallel; in
+        # OpenEye_FPGA it is an internal wire driven by the design, so the
+        # testbench must not drive it or wait on the external cycle handshake.
+        drive_cycle_handshake = getattr(dut, "_name", "") == "OpenEye_Parallel"
+        compute_cycles = (
+            int(layer_parameters.needed_refreshes_mx[layer_repetition][0])
+            if drive_cycle_handshake else 1
         )
-        await _wait_for_signal(
-            ptp, dut.start_new_cycle, name="start_new_cycle", expected=1,
-            context=" before the first serial convolution output", dut=dut,
-        )
-        cocotb.start_soon(set_input(ptp, dut.psum_transmitted_i, 0))
-        await _wait_for_signal(
-            ptp, dut.start_new_cycle, name="start_new_cycle", expected=0,
-            context=" before collecting the first serial convolution output",
-            dut=dut,
-        )
+        if drive_cycle_handshake:
+            await _wait_for_signal(
+                ptp, dut.start_new_cycle, name="start_new_cycle", expected=1,
+                context=" before the first serial convolution output", dut=dut,
+            )
+            cocotb.start_soon(set_input(ptp, dut.psum_transmitted_i, 0))
+            await _wait_for_signal(
+                ptp, dut.start_new_cycle, name="start_new_cycle", expected=0,
+                context=" before collecting the first serial convolution output",
+                dut=dut,
+            )
 
         for compute_cycle in range(compute_cycles):
             await _wait_for_signal(
@@ -2683,7 +2689,7 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                 )
 
             cocotb.start_soon(set_input(ptp, dut.ready_dma_i, 0))
-            if compute_cycle + 1 < compute_cycles:
+            if drive_cycle_handshake and compute_cycle + 1 < compute_cycles:
                 cocotb.start_soon(set_input(ptp, dut.psum_transmitted_i, 1))
                 await _wait_for_signal(
                     ptp, dut.start_new_cycle, name="start_new_cycle", expected=1,
@@ -2697,11 +2703,12 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                              f"{compute_cycle + 1}"), dut=dut,
                 )
 
-        await _wait_for_signal(
-            ptp, dut.finished_cycles, name="finished_cycles",
-            expected=compute_cycles,
-            context=" after serial convolution compute schedule", dut=dut,
-        )
+        if drive_cycle_handshake:
+            await _wait_for_signal(
+                ptp, dut.finished_cycles, name="finished_cycles",
+                expected=compute_cycles,
+                context=" after serial convolution compute schedule", dut=dut,
+            )
 
     if(math.floor(layer_repetition%(layer_parameters.iact_transmissions_pe*layer_parameters.needed_wght_transmissions)) == \
         (layer_parameters.iact_transmissions_pe*layer_parameters.needed_wght_transmissions-1)):
