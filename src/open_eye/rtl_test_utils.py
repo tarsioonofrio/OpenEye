@@ -667,6 +667,54 @@ async def trace_converter(ptp, dut, oep, max_lines=260):
         lines += 1
 
 
+async def trace_pe_macs(ptp, dut, oep, cl_x=0, cl_y=0, pe_col=0, max_cycles=20000):
+    """Log what each PE row of one column multiplies, cycle by cycle (FPGA top).
+
+    One "pemac" line per PE row and clock while the PE is computing: the
+    activation in use, the weight each MAC lane multiplies, the psum address
+    each lane accumulates into and whether the product is flagged valid. With a
+    structured weight pattern this shows which weight group meets which
+    activation and where it lands, which the loaded SPAD contents cannot.
+    """
+    pes = []
+    for pe_row in range(oep.PEs_Y):
+        try:
+            pes.append((pe_row, dut.OpenEye_Parallel.gen_x[cl_x].gen_y[cl_y]
+                        .OpenEye_Cluster.pe_cluster.gen_X[pe_col]
+                        .gen_Y[pe_row].pe))
+        except Exception as exc:
+            logger.error("trace_pe_macs: PE row %d unreachable (%s)", pe_row,
+                         type(exc).__name__)
+            return
+
+    def read(pe, name, lane=None):
+        try:
+            handle = getattr(pe, name)
+            return int((handle[lane] if lane is not None else handle).value)
+        except (AttributeError, IndexError, ValueError, TypeError):
+            return None
+
+    def signed8(v):
+        return None if v is None else (v - 256 if v & 0x80 else v)
+
+    for cycle in range(max_cycles):
+        await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+        for pe_row, pe in pes:
+            if not read(pe, "current_state_computing"):  # skip IDLE (state 0)
+                continue
+            lanes = range(oep.PARALLEL_MACS)
+            logger.info(
+                "pemac r=%d cyc=%d state=%s act=%s wvec=%s valid=%s "
+                "w=%s addr=%s mult=%s",
+                pe_row, cycle, read(pe, "current_state_computing"),
+                signed8(read(pe, "iact_data_current_3")),
+                read(pe, "wght_data_vec"), read(pe, "values_valid"),
+                [signed8(read(pe, "mult_fac_1", l)) for l in lanes],
+                [read(pe, "psum_spad_addr_r", l) for l in lanes],
+                [read(pe, "mult_o_w", l) for l in lanes],
+            )
+
+
 def dump_pe_wght_words(dut, oep, words=60, clusters=((0, 0),)):
     """Log the decoded weight SPAD of every PE in the given clusters.
 

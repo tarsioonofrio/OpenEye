@@ -262,6 +262,8 @@ async def execute_model(dut, only_files, sparse_iacts, sparse_wghts, layer_es, s
         cocotb.start_soon(rtl_test_utils.trace_conv_writeback(ptp, dut))
     if os.environ.get("TRACE_PE_CALC"):
         cocotb.start_soon(rtl_test_utils.trace_pe_calc_loop(ptp, dut, openeye_parameter))
+    if os.environ.get("OPENEYE_TRACE_PE_MACS"):
+        cocotb.start_soon(rtl_test_utils.trace_pe_macs(ptp, dut, openeye_parameter))
     if os.environ.get("DUMP_CLUSTER_IACT"):
         cocotb.start_soon(rtl_test_utils.monitor_cluster_iact(ptp, dut, openeye_parameter))
         cocotb.start_soon(rtl_test_utils.monitor_pe_iact(ptp, dut, openeye_parameter))
