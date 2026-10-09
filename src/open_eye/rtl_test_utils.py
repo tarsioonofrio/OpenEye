@@ -667,6 +667,61 @@ async def trace_converter(ptp, dut, oep, max_lines=260):
         lines += 1
 
 
+def dump_pe_wght_words(dut, oep, words=60, clusters=((0, 0),)):
+    """Log the decoded weight SPAD of every PE in the given clusters.
+
+    Each word is shown as one "overhead:payload" pair per MAC lane (lane p is
+    bits [12p +: 12] = {overhead[3:0], payload[7:0]}), so a structured weight
+    pattern can be read back as channel/filter/tap and compared with the order
+    the stream mapper intended.
+    """
+    for cl_x, cl_y in clusters:
+        for pe_col in range(oep.PEs_X):
+            for pe_row in range(oep.PEs_Y):
+                try:
+                    pe = (dut.OpenEye_Parallel.gen_x[cl_x].gen_y[cl_y]
+                          .OpenEye_Cluster.pe_cluster.gen_X[pe_col]
+                          .gen_Y[pe_row].pe)
+                    mem = pe.weight_data_SPad.ram.impl.mem
+                except Exception as exc:
+                    logger.info("PE_WGHT cl=(%d,%d) pe=(%d,%d) unreachable (%s)",
+                                cl_x, cl_y, pe_col, pe_row, type(exc).__name__)
+                    continue
+                dec = []
+                for addr in range(words):
+                    try:
+                        w = int(mem[addr].value)
+                    except ValueError:
+                        dec.append("X")
+                        continue
+                    except IndexError:
+                        break
+                    lanes = []
+                    for lane in range(oep.PARALLEL_MACS):
+                        f = (w >> (12 * lane)) & 0xFFF
+                        pay = f & 0xFF
+                        pay = pay - 256 if pay & 0x80 else pay
+                        lanes.append("%d:%d" % (f >> 8, pay))
+                    dec.append("/".join(lanes))
+                logger.info("PE_WGHT cl=(%d,%d) pe=(%d,%d) = %s",
+                            cl_x, cl_y, pe_col, pe_row, " ".join(dec))
+                try:
+                    amem = pe.gen_wght_addr_spad.weight_addr_SPad.ram.impl.mem
+                    addrs = []
+                    for addr in range(words):
+                        try:
+                            addrs.append(str(int(amem[addr].value)))
+                        except ValueError:
+                            addrs.append("X")
+                        except IndexError:
+                            break
+                    logger.info("PE_WADDR cl=(%d,%d) pe=(%d,%d) = %s",
+                                cl_x, cl_y, pe_col, pe_row, " ".join(addrs))
+                except Exception as exc:
+                    logger.info("PE_WADDR cl=(%d,%d) pe=(%d,%d) unreachable (%s)",
+                                cl_x, cl_y, pe_col, pe_row, type(exc).__name__)
+
+
 def dump_pe_occupancy(dut, oep, depth=32):
     """Log how many of the first `depth` words each PE has written.
 
@@ -2584,6 +2639,8 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
         """
         words = oep.DMA_BITWIDTH // 32
         dut._log.info("Output Stream started")
+        if os.environ.get("OPENEYE_DUMP_PE_WGHT", "0").lower() in {"1", "true", "yes", "on"}:
+            dump_pe_wght_words(dut, oep)
         used_clusters_per_calc = math.ceil(layer_parameters.iact_size_x / 4) * 4
         values_per_transmission = math.ceil(layer_parameters.different_kernels_per_calculation*used_clusters_per_calc/2)
         transmissions_per_cycle = (oep.Clusters_Y * oep.Clusters_X * oep.PEs_X)//2
