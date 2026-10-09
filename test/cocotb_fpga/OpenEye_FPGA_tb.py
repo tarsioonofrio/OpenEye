@@ -383,6 +383,48 @@ async def execute_model(dut, only_files, sparse_iacts, sparse_wghts, layer_es, s
                         for x in range(len(row)):
                             row[x] = 1 + c + 5 * f
         logger.info("OPENEYE_MIX_WEIGHTS: weight[c][f] = 1 + c + 5*f")
+    if os.environ.get("OPENEYE_MIX_TAP_WEIGHTS"):
+        # Vary the kernel tap together with one other axis, which neither
+        # OPENEYE_ASYMMETRIC_KERNEL (tap only) nor OPENEYE_MIX_WEIGHTS (channel
+        # and filter only) can do. "c": 1 + c + 4*tap. "f": 1 + f + 4*tap. "cf": all three axes.
+        # "rp": random positive.
+        # A mapper that interleaves taps with channels or filters in the wrong
+        # order gives a correct result for each of those patterns but not here.
+        axis = os.environ["OPENEYE_MIX_TAP_WEIGHTS"]
+        for layer_number, params in enumerate(layer_parameters):
+            if "Conv" not in str(params.layer_name):
+                continue
+            for c, channel in enumerate(dram.weights[layer_number]):
+                for f, kernel in enumerate(channel):
+                    for y, row in enumerate(kernel):
+                        for x in range(len(row)):
+                            tap = x + len(row) * y
+                            if axis.startswith("cf"):
+                                # All three axes at once, kept inside int8.
+                                # "cfM" wraps at M (default 120).
+                                modulus = int(axis[2:]) if axis[2:] else 120
+                                row[x] = (c + 4 * f + 16 * tap) % modulus + 1
+                            elif axis == "rp":
+                                # Random but strictly positive, to separate a
+                                # sign problem from the three-axis interplay.
+                                row[x] = __import__("random").Random(1000 * c + 100 * f + tap).randint(1, 63)
+                            else:
+                                row[x] = 1 + (c if axis == "c" else f) + 4 * tap
+        logger.info("OPENEYE_MIX_TAP_WEIGHTS=%s: weight = 1 + axis + 4*tap", axis)
+    if os.environ.get("OPENEYE_SCALE_WEIGHTS"):
+        # Multiply every conv weight by an integer (negative allowed) after the
+        # pattern hooks above. Separates sign from magnitude when a structured,
+        # all-positive pattern passes but random weights fail.
+        scale = int(os.environ["OPENEYE_SCALE_WEIGHTS"])
+        for layer_number, params in enumerate(layer_parameters):
+            if "Conv" not in str(params.layer_name):
+                continue
+            for channel in dram.weights[layer_number]:
+                for kernel in channel:
+                    for row in kernel:
+                        for x in range(len(row)):
+                            row[x] = row[x] * scale
+        logger.info("OPENEYE_SCALE_WEIGHTS: conv weights multiplied by %d", scale)
     if os.environ.get("OPENEYE_RAMP_IACTS"):
         # Layer-0 activation k becomes k+1, so a PE's stored payloads name the
         # exact input positions it received. Constant operands can only show
