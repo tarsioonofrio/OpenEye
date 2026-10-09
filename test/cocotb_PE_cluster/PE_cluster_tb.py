@@ -56,6 +56,51 @@ async def probe_psum_hazard(dut, cycles=60):
                           cycle, *row)
 
 
+async def trace_mac_data(dut, cycles=180):
+    """Trace actual sparse operands and their PSUM addresses at one PE row."""
+    pe_row = int(os.environ.get("DUMP_WGHT_SPAD_PE", "0"))
+    pe = dut.gen_X[0].gen_Y[pe_row].pe
+
+    def read(signal, lane=None):
+        try:
+            handle = getattr(pe, signal)
+            return int((handle[lane] if lane is not None else handle).value)
+        except (AttributeError, IndexError, ValueError):
+            return None
+
+    def sparse_read(signal):
+        try:
+            return int(getattr(pe.gen_sparse_fsm, signal).value)
+        except (AttributeError, ValueError):
+            return None
+
+    for cycle in range(cycles):
+        await Timer(clk_cycle, unit=clk_cycle_unit)
+        if not read("computing"):
+            continue
+        dut._log.info(
+            "mac row=%d cycle=%d state=%d iact_idx=%s iact=%s wvec=%s "
+            "nwords=%s start/end=%s/%s valid=%s next=%s "
+            "waddr=%s wdata=%06x oh=%s/%s psum_addr=%s/%s "
+            "mul=(%s*%s,%s*%s) mult=(%s,%s) "
+            "write_addr=%s/%s write_en=%s/%s adder=%s/%s",
+            pe_row, cycle, read("current_state_computing"), read("iact_addr_current"),
+            read("iact_data_current_3"), read("wght_data_vec"),
+            read("second_spad_words_wght"),
+            sparse_read("wght_data_start"), sparse_read("wght_data_end"),
+            read("values_valid"), sparse_read("next_iact"),
+            read("wght_data_SPad_addr"), read("wght_data_SPad_data_r") or 0,
+            read("wght_data_spad_oh_acc", 0), read("wght_data_spad_oh_acc", 1),
+            read("psum_spad_addr_r", 0), read("psum_spad_addr_r", 1),
+            read("mult_fac_1", 0), read("mult_fac_2", 0),
+            read("mult_fac_1", 1), read("mult_fac_2", 1),
+            read("mult_o_w", 0), read("mult_o_w", 1),
+            read("psum_spad_addr_w", 0), read("psum_spad_addr_w", 1),
+            read("psum_data_SPad_en_w_i", 0), read("psum_data_SPad_en_w_i", 1),
+            read("adder_o_w", 0), read("adder_o_w", 1),
+        )
+
+
 async def trace_psum_forward(dut, cycles=40):
     """Trace the psum SPAD read/write and bypass signals of every lane at one PE row."""
     pe_row = int(os.environ.get("DUMP_WGHT_SPAD_PE", "0"))
@@ -206,6 +251,8 @@ async def dump_wght_spad(dut, wghts_array):
     for r in range(len(wghts_array)):
         flat = wghts_array[r].reshape(-1)
         zeros = [int(i) for i in range(len(flat)) if flat[i] == 0]
+        if os.environ.get("OPENEYE_TRACE_WGHT_PIPE"):
+            dut._log.info("PE row %d source weights = %s", r, flat.tolist())
         dut._log.info("PE row %d: %d filters/row, zero flat positions %s",
                       r, len(wghts_array[r][0]), zeros)
 
@@ -242,6 +289,8 @@ async def test_hdls(ptp, dut, iacts_array, wghts_array, psum_array):
     # Trigger computation: pulse compute_i high for one cycle
     if os.environ.get("PROBE_PSUM_HAZARD"):
         cocotb.start_soon(probe_psum_hazard(dut))
+    if os.environ.get("OPENEYE_TRACE_MAC"):
+        cocotb.start_soon(trace_mac_data(dut))
     if os.environ.get("OPENEYE_TRACE_PSUM_FWD"):
         cocotb.start_soon(trace_psum_forward(dut))
     if os.environ.get("OPENEYE_TRACE_WGHT_FSM"):
@@ -818,12 +867,18 @@ def generate_spad(
         # row's count lands one address too low. Emit one padding entry
         # carrying the accumulated skip so every row contributes a word.
         if ignore_zeros and stored_in_row == 0:
+            # The padding word is itself a stored (zero) weight, so it occupies
+            # the row's last position. The hardware counts oh + 1 positions per
+            # word to find where the row ends; carrying the full zero run as oh
+            # would make the row span one position too many and shift every
+            # later row's word range by one.
+            pad_overhead = max(overhead - 1, 0)
             if sisd:
-                data_spad_data[current_count] = (overhead << bitwidth)
+                data_spad_data[current_count] = (pad_overhead << bitwidth)
             else:
                 data_spad_data[int(math.floor(current_count / 2))] = (
                     data_spad_data[int(math.floor(current_count / 2))]
-                    + ((overhead << bitwidth) << (offset * (current_count % 2))))
+                    + ((pad_overhead << bitwidth) << (offset * (current_count % 2))))
             current_count = current_count + 1
             overhead = 0
 
