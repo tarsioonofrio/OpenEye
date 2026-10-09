@@ -2502,7 +2502,21 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                                             output_lane, i, f, x, y, value,
                                         )
                                         psum_trace_word_lines += 1
-                                    dram.fmap[layer_number + 1][f][x][y] = value
+                                    try:
+                                        dram.fmap[layer_number + 1][f][x][y] = value
+                                    except IndexError:
+                                        fmap_out = dram.fmap[layer_number + 1]
+                                        logger.error(
+                                            "conv_fmap_index_error beat=%d lane=%d "
+                                            "slot=%d position=%d f=%d x=%d y=%d "
+                                            "fmap_dims=(%d,%d,%d)",
+                                            captured_beats, output_lane, i,
+                                            map_position, f, x, y, len(fmap_out),
+                                            len(fmap_out[0]) if len(fmap_out) else 0,
+                                            len(fmap_out[0][0]) if len(fmap_out)
+                                            and len(fmap_out[0]) else 0,
+                                        )
+                                        raise
                 await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
             else:
                 raise TimeoutError(
