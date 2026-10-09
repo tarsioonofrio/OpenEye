@@ -56,6 +56,65 @@ async def probe_psum_hazard(dut, cycles=60):
                           cycle, *row)
 
 
+async def trace_psum_forward(dut, cycles=40):
+    """Trace the psum SPAD read/write and bypass signals of every lane at one PE row."""
+    pe_row = int(os.environ.get("DUMP_WGHT_SPAD_PE", "0"))
+    pe = dut.gen_X[0].gen_Y[pe_row].pe
+    lanes = int(dut.PARALLEL_MACS.value)
+
+    def read(signal, lane=None):
+        try:
+            handle = getattr(pe, signal)
+            return int((handle[lane] if lane is not None else handle).value)
+        except (AttributeError, IndexError, ValueError):
+            return None
+
+    for cycle in range(cycles):
+        await Timer(clk_cycle, unit=clk_cycle_unit)
+        if cycle < 6:
+            continue
+        for lane in range(lanes):
+            dut._log.info(
+                "fwd row=%d cyc=%02d lane=%d rd=%s wr=%s wr_en=%s rd_en_i=%s "
+                "reuse=%s reused=%s summ=%s use_psum=%s adder_o=%s mult=%s spad_o=%s comp=%s wr_addr_out_en=%s",
+                pe_row, cycle, lane,
+                read("psum_spad_addr_r", lane), read("psum_spad_addr_w", lane),
+                read("psum_data_SPad_en_w_i", lane), read("psum_data_SPad_en_r_i", lane),
+                read("reuse_psum_spad", lane), read("reused_data", lane),
+                read("adder_summand_1", lane), read("use_psum", lane),
+                read("adder_o_w", lane), read("mult_o_w", lane),
+                read("psum_spad_data_o", lane), read("computing"), read("psum_data_SPad_en_w", lane),
+            )
+
+
+async def trace_wght_fsm(dut, cycles=40):
+    """Trace the sparse FSM weight-range state of one PE row (OPENEYE_TRACE_WGHT_FSM)."""
+    pe_row = int(os.environ.get("DUMP_WGHT_SPAD_PE", "0"))
+    pe = dut.gen_X[0].gen_Y[pe_row].pe
+    fsm = pe.gen_sparse_fsm
+
+    def read(obj, signal):
+        try:
+            return int(getattr(obj, signal).value)
+        except (AttributeError, IndexError, ValueError):
+            return None
+
+    for cycle in range(cycles):
+        await Timer(clk_cycle, unit=clk_cycle_unit)
+        dut._log.info(
+            "wfsm row=%d cyc=%02d st=%s comp=%s vec=%s start=%s end=%s start_pre=%s end_pre=%s "
+            "valid=%s next=%s fast=%s wvec_addr=%s wspad_addr=%s words=%s iact_cur=%s "
+            "start_set=%s end_set=%s",
+            pe_row, cycle, read(pe, "current_state_computing"), read(pe, "computing"),
+            read(pe, "wght_data_vec"), read(fsm, "wght_data_start"), read(fsm, "wght_data_end"),
+            read(fsm, "wght_data_start_pre"), read(fsm, "wght_data_end_pre"),
+            read(pe, "values_valid"), read(fsm, "next_iact"), read(fsm, "fast_cycle"),
+            read(pe, "wght_addr_vec"), read(pe, "wght_data_SPad_addr"),
+            read(pe, "second_spad_words_wght"), read(pe, "iact_addr_current"),
+            read(fsm, "wght_start_set"), read(fsm, "wght_end_set"),
+        )
+
+
 async def dump_psum_spad(dut):
     """Print each MAC lane's psum SPAD, i.e. the accumulator per filter.
 
@@ -183,6 +242,10 @@ async def test_hdls(ptp, dut, iacts_array, wghts_array, psum_array):
     # Trigger computation: pulse compute_i high for one cycle
     if os.environ.get("PROBE_PSUM_HAZARD"):
         cocotb.start_soon(probe_psum_hazard(dut))
+    if os.environ.get("OPENEYE_TRACE_PSUM_FWD"):
+        cocotb.start_soon(trace_psum_forward(dut))
+    if os.environ.get("OPENEYE_TRACE_WGHT_FSM"):
+        cocotb.start_soon(trace_wght_fsm(dut))
     cocotb.start_soon(rtl_test_utils.set_input(ptp, dut.compute_i, (2**12)-1))
     await Timer(clk_cycle, unit=clk_cycle_unit)
     cocotb.start_soon(rtl_test_utils.set_input(ptp, dut.compute_i, 0))
