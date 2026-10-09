@@ -418,6 +418,26 @@ async def send_stream(ptp, dut, stream, oep, lp, layer_repetition):
         # sent so a section-count mismatch with the DUT is visible.
         logger.info("DMA stream sections (words each): %s",
                     [len(section) for section in stream])
+        if os.environ.get("OPENEYE_DUMP_DMA_IACT", "0").lower() in {"1", "true", "yes", "on"}:
+            # Section 1 is the activation stream. Show each 24-bit word as its
+            # 12-bit entries {overhead[3:0], payload[7:0]}, low entry first.
+            for sec_name, sec_idx in (("iact", 1),):
+                try:
+                    decoded = []
+                    for word in stream[sec_idx]:
+                        word = int(word)
+                        ents = []
+                        for e in range(2):
+                            f = (word >> (12 * e)) & 0xFFF
+                            pay = f & 0xFF
+                            pay = pay - 256 if pay & 0x80 else pay
+                            ents.append("%d:%d" % (f >> 8, pay))
+                        decoded.append("/".join(ents))
+                    logger.info("DMA %s words (oh:payload per entry) = %s",
+                                sec_name, " ".join(decoded))
+                except Exception as exc:
+                    logger.info("DMA %s dump failed (%s)", sec_name,
+                                type(exc).__name__)
         for name in ("trans_cycles_iact", "trans_cycles_wght", "trans_cycles_psum"):
             try:
                 logger.info("DUT expects %s = %d", name, int(getattr(dut, name).value))
@@ -753,6 +773,34 @@ def dump_pe_wght_words(dut, oep, words=60, clusters=((0, 0),)):
                     dec.append("/".join(lanes))
                 logger.info("PE_WGHT cl=(%d,%d) pe=(%d,%d) = %s",
                             cl_x, cl_y, pe_col, pe_row, " ".join(dec))
+                for label, path in (("PE_IACT", "iact_data_SPad"),
+                                    ("PE_IADDR", "gen_iact_addr_spad.iact_addr_SPad")):
+                    try:
+                        imem = pe
+                        for part in path.split("."):
+                            imem = getattr(imem, part)
+                        imem = imem.ram.impl.mem
+                        vals = []
+                        for addr in range(words):
+                            try:
+                                iv = int(imem[addr].value)
+                            except ValueError:
+                                vals.append("X")
+                                continue
+                            except IndexError:
+                                break
+                            if label == "PE_IACT":
+                                pay = iv & 0xFF
+                                pay = pay - 256 if pay & 0x80 else pay
+                                vals.append("%d:%d" % ((iv >> 8) & 0xF, pay))
+                            else:
+                                vals.append(str(iv))
+                        logger.info("%s cl=(%d,%d) pe=(%d,%d) = %s", label,
+                                    cl_x, cl_y, pe_col, pe_row, " ".join(vals))
+                    except Exception as exc:
+                        logger.info("%s cl=(%d,%d) pe=(%d,%d) unreachable (%s)",
+                                    label, cl_x, cl_y, pe_col, pe_row,
+                                    type(exc).__name__)
                 try:
                     amem = pe.gen_wght_addr_spad.weight_addr_SPad.ram.impl.mem
                     addrs = []
