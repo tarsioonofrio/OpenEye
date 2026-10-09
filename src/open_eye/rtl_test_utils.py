@@ -1885,8 +1885,15 @@ async def _wait_for_dense_pes_ready(ptp, dut, layer_parameters, oep):
 
 
 async def _wait_for_dense_cluster_output(ptp, dut, layer_parameters, oep):
-    """Wait for an active cluster PSUM lane, after the configured delay."""
+    """Wait for an active cluster PSUM lane, after the configured delay.
+
+    OPENEYE_DENSE_WAIT_DATA=1 additionally requires a non-zero payload on an
+    enabled lane, to tell an early enable apart from missing PE output.
+    """
     max_cycles = _max_wait_cycles()
+    wait_for_data = os.environ.get("OPENEYE_DENSE_WAIT_DATA", "0").lower() in {
+        "1", "true", "yes", "on"
+    }
     for _ in range(max_cycles):
         for cl_y in range(oep.Clusters_Y):
             for cl_x in range(oep.Clusters_X):
@@ -1899,7 +1906,19 @@ async def _wait_for_dense_cluster_output(ptp, dut, layer_parameters, oep):
                 except (TypeError, ValueError):
                     continue
                 if enable & mask:
-                    return
+                    if not wait_for_data:
+                        return
+                    # Opt-in: the enable can be high while the lane still
+                    # carries zeros, so also require a non-zero payload.
+                    try:
+                        data = int(cluster.delay_cluster_data_out.value)
+                    except (TypeError, ValueError):
+                        continue
+                    width = oep.PSUM_Trans_Bitwidth
+                    for router in range(oep.NUM_GLB_PSUM):
+                        if (mask & enable & (1 << router)
+                                and (data >> (router * width)) & ((1 << width) - 1)):
+                            return
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
     raise TimeoutError(
         "No active dense PSUM lane reached delay_cluster_data_out within "
