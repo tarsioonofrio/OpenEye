@@ -699,7 +699,8 @@ async def trace_pe_macs(ptp, dut, oep, cl_x=0, cl_y=0, pe_col=0, max_cycles=2000
     pes = []
     for pe_row in range(oep.PEs_Y):
         try:
-            pes.append((pe_row, dut.OpenEye_Parallel.gen_x[cl_x].gen_y[cl_y]
+            top = dut if getattr(dut, "_name", "") == "OpenEye_Parallel" else dut.OpenEye_Parallel
+            pes.append((pe_row, top.gen_x[cl_x].gen_y[cl_y]
                         .OpenEye_Cluster.pe_cluster.gen_X[pe_col]
                         .gen_Y[pe_row].pe))
         except Exception as exc:
@@ -1602,7 +1603,7 @@ def _log_iact_buffer_occupancy(dut, oep, max_addr=64):
                  [(c, a, hex(w)) for c, a, w in written[:4]])
 
 
-async def write_iact(ptp, dut, stream, oep, lp):
+async def write_iact(ptp, dut, stream, oep, lp, first_position=0, last_position=None):
     """Write the input activations to the DUT.
     
     This function writes the input activations to the OpenEye accelerator through its
@@ -1646,7 +1647,19 @@ async def write_iact(ptp, dut, stream, oep, lp):
             1, math.ceil(lp.used_iact_per_PE / selector_values_per_word)
         )
         selector_write_count = max(1, lp.needed_Iact_writes)
-        for position in range(len(stream[0][0][0])):
+        if os.environ.get("OPENEYE_TRACE_PE_WRITES", "0").lower() in {
+            "1", "true", "yes", "on"
+        }:
+            logger.info(
+                "write_iact layout positions=%d words_per_write=%d writes=%d "
+                "refreshes=%s used_Y_cluster=%s",
+                len(stream[0][0][0]), selector_words_per_write,
+                selector_write_count,
+                getattr(lp, "needed_refreshes_mx", None), lp.used_Y_cluster,
+            )
+        if last_position is None:
+            last_position = len(stream[0][0][0])
+        for position in range(first_position, last_position):
             iact_enable_signal = 0
             for x_cluster in range(oep.Clusters_X):
                 for y_cluster in range(oep.Clusters_Y):
@@ -2139,7 +2152,7 @@ def _fsm_state_note(dut):
         return ""
 
 
-async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_parameters, oep, les, dram, login_level, output_order):
+async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_parameters, oep, les, dram, login_level, output_order, iact_refill=None):
     """Compare convolutional layer output stream with expected results.
 
     The debug logging functionality is controlled by login_level to manage file I/O:
@@ -2228,6 +2241,7 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
                 ptp, dut, layer_parameters, layer_repetition, oep,
                 feedback_words=conv_feedback_words,
                 feedback_tags=conv_feedback_tags,
+                iact_refill=iact_refill,
             ))
             await _wait_for_signal(
                 ptp, dut.psum_enable_o, name="psum_enable_o",
@@ -2864,6 +2878,11 @@ async def compare_stream_Conv(ptp, dut, layer_number, layer_repetition, layer_pa
 
             cocotb.start_soon(set_input(ptp, dut.ready_dma_i, 0))
             if drive_cycle_handshake and compute_cycle + 1 < compute_cycles:
+                if iact_refill is not None:
+                    # The next compute cycle needs its own activation block in
+                    # the PEs; the FPGA's iact_stream_constructor supplies it,
+                    # here the testbench has to before releasing the cycle.
+                    await iact_refill(compute_cycle + 1)
                 cocotb.start_soon(set_input(ptp, dut.psum_transmitted_i, 1))
                 await _wait_for_signal(
                     ptp, dut.start_new_cycle, name="start_new_cycle", expected=1,
@@ -5194,7 +5213,7 @@ async def _trace_conv_feedback_capture(
 
 async def send_enable_conv(
     ptp, dut, layer_params, layer_repetition, oep, feedback_words=None,
-    feedback_tags=None,
+    feedback_tags=None, iact_refill=None,
 ):
     """Send enable signals for convolution layer operation.
     
@@ -5253,6 +5272,9 @@ async def send_enable_conv(
     mask = (1 << (oep.Clusters_X * oep.Clusters_Y * oep.NUM_GLB_PSUM)) - 1
 
     for compute_cycle in range(compute_cycles):
+        if iact_refill is not None and compute_cycle > 0:
+            # Each compute cycle needs its own block of activations in the PEs.
+            await iact_refill(compute_cycle)
         # A high ready phase advances the top-level scheduler once. Lowering it
         # rearms start_new_cycle while the PEs calculate and transfer PSUMs.
         cocotb.start_soon(set_input(ptp, dut.psum_transmitted_i, 1))
@@ -5278,7 +5300,10 @@ async def send_enable_conv(
             feedback_words[previous_start:previous_start + beats_per_cycle]
             if compute_cycle > 0 else []
         )
-        if compute_cycle > 0 and len(previous_psums) != beats_per_cycle:
+        if os.environ.get("OPENEYE_CONV_NO_FEEDBACK"):
+            # Experiment: do not feed the previous cycle's output back in.
+            previous_psums = []
+        elif compute_cycle > 0 and len(previous_psums) != beats_per_cycle:
             raise RuntimeError(
                 "Convolution PSUM feedback is incomplete before compute "
                 f"cycle {compute_cycle}: got {len(previous_psums)} of "

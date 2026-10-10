@@ -197,6 +197,11 @@ async def single_layer_test(dut):
             ptp, dut, openeye_parameter
         ))
 
+    if os.environ.get("OPENEYE_TRACE_PE_MACS"):
+        cocotb.start_soon(rtl_test_utils.trace_pe_macs(
+            ptp, dut, openeye_parameter
+        ))
+
     # Process the layers of the model one after another
     for layer_number, layer in enumerate(model.layers):
         if("Pooling" in str(layer)):
@@ -234,6 +239,31 @@ async def single_layer_test(dut):
 async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, layer_es, dram, log_level, layer_number, layer, output_order):
     global status_thread, iact_thread, wght_thread, psum_thread
     logger.info("Send stream.")
+    # A serial convolution on the bare parallel core computes one output row
+    # per compute cycle, and each cycle needs its own block of activations in
+    # the PEs. Send block 0 now and the others between the cycles.
+    iact_stream = stream[layer_repetition][strdic.stream_parallel_dict["iact"]]
+    compute_cycles = 1
+    if "Conv" in str(layer) and hasattr(dut, "iact_choose_i"):
+        compute_cycles = int(lp.needed_refreshes_mx[layer_repetition][0])
+    block_len = len(iact_stream[0][0][0]) // max(compute_cycles, 1)
+    split_iacts = (compute_cycles > 1 and block_len > 0
+                   and block_len * compute_cycles == len(iact_stream[0][0][0]))
+
+    def write_iact_block(block):
+        if not split_iacts:
+            return rtl_test_utils.write_iact(
+                ptp, dut, iact_stream, oep, lp)
+        return rtl_test_utils.write_iact(
+            ptp, dut, iact_stream, oep, lp,
+            first_position=block * block_len,
+            last_position=(block + 1) * block_len)
+
+    async def iact_refill(block):
+        logger.info("iact refill block %d of %d", block, compute_cycles)
+        await write_iact_block(block)
+        await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+
     status_thread = cocotb.start_soon(rtl_test_utils.send_stream(ptp, dut, stream[layer_repetition], oep, lp, layer_repetition))
     await status_thread
     # Wait for the actual three-cycle config stream and every PE's final
@@ -246,7 +276,7 @@ async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, la
         await wght_thread
     # start the transmission of the data
     else :
-        iact_thread = cocotb.start_soon(rtl_test_utils.write_iact(ptp, dut, stream[layer_repetition][strdic.stream_parallel_dict["iact"]], oep, lp))
+        iact_thread = cocotb.start_soon(write_iact_block(0))
         wght_thread = cocotb.start_soon(rtl_test_utils.write_wght(ptp, dut, stream[layer_repetition][strdic.stream_parallel_dict["wght"]], oep, lp))
     # wait until all transmission are finished
     await iact_thread
@@ -292,7 +322,8 @@ async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, la
     elif("Conv" in str(layer)):
         await rtl_test_utils.compare_stream_Conv(
             ptp, dut, layer_number, layer_repetition, lp,
-            oep, layer_es, dram, log_level, output_order
+            oep, layer_es, dram, log_level, output_order,
+            iact_refill=iact_refill if split_iacts else None
         )
     elif("Dense" in str(layer)):
         await rtl_test_utils.compare_stream_Dense(
