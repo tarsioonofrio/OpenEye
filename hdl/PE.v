@@ -1121,12 +1121,7 @@ module PE #(
             next_iact              <= 0;
             iact_addr_SPad_addr    <= 0;
             iact_addr_SPad_en_r    <= 0;
-            // Activation data for successive refreshes is stored contiguously
-            // in this SPAD. Keep its read pointer between compute passes; a
-            // newly accepted activation stream below starts again at address 0.
-            if (!iact_set && mux_iact_b_o_w) begin
-              iact_data_SPad_addr <= 0;
-            end
+            iact_data_SPad_addr    <= 0;
             iact_data_SPad_en_r    <= 0;
             iact_oh_delay_1        <= 0;
             iact_oh_delay_2        <= 0;
@@ -1168,6 +1163,7 @@ module PE #(
               wght_ready_o            <= 0;
               psum_select             <= 0;
               iact_addr_SPad_en_r     <= 1;
+              iact_data_SPad_addr     <= 0;
               iact_data_SPad_en_r     <= 1;
               for (mac_i = 0; mac_i < PARALLEL_MACS; mac_i=mac_i+1) begin
                 psum_data_SPad_en_r[mac_i]   <= 0;
@@ -1609,6 +1605,7 @@ module PE #(
             iact_addr_SPad_addr   <= 0;
             iact_addr_SPad_en_r   <= 0;
 
+            iact_data_SPad_addr   <= 0;
             iact_data_SPad_en_r   <= 0;
 
             wght_addr_SPad_en_r   <= 0;
