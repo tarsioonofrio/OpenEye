@@ -1715,6 +1715,14 @@ async def write_iact(ptp, dut, stream, oep, lp, first_position=0, last_position=
             for _ in range(subword_cycles):
                 await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
             iact_transmission = 0
+            write_gap = int(os.environ.get("OPENEYE_IACT_WRITE_GAP", "0"))
+            if (write_gap and conv_layer and hasattr(dut, "iact_choose_i")
+                    and (position + 1) % selector_words_per_write == 0):
+                # Let the PE input pipeline commit the last words of this
+                # write before iact_choose moves on to the next bank window.
+                cocotb.start_soon(set_input(ptp,(dut.iact_enable_i), 0))
+                for _ in range(write_gap):
+                    await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
         cocotb.start_soon(set_input(ptp,(dut.iact_data_i), 0))
         cocotb.start_soon(set_input(ptp,(dut.iact_enable_i), 0))
 

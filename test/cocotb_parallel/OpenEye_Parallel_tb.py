@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: SHL-2.1
 # For more details, see the LICENSE file in the root directory of this project.
 import sys
+import math
 import os
 directory = (os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir)))
 sys.path.extend([directory, os.path.dirname(os.path.realpath(__file__))])
@@ -169,6 +170,11 @@ async def single_layer_test(dut):
         model.layers, layer_parameters, sparse_iacts, sparse_wghts
     )
     time_printer.timestamp("DRAM Initialized. ", logger)
+    if os.environ.get("OPENEYE_LOG_INPUT"):
+        for c0 in range(min(4, len(dram.fmap[0]))):
+            for i in range(1):
+                logger.info("input fmap[0][%d][%d][0:8] = %s", c0, i,
+                            list(dram.fmap[0][c0][i][:8]))
 
     time_printer.timestamp("OpenEye parameters set. ", logger)
 
@@ -250,12 +256,47 @@ async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, la
     split_iacts = (compute_cycles > 1 and block_len > 0
                    and block_len * compute_cycles == len(iact_stream[0][0][0]))
 
+    sub_bits = oep.IACT_WOH_Bitwidth
+    subs_per_word = max(1, oep.IACT_Trans_Bitwidth // sub_bits)
+    words_per_write = max(1, math.ceil(lp.used_iact_per_PE / subs_per_word))
+
+    def shifted_stream(block):
+        # data_pipeline_iact alternates the start of each compute cycle's line
+        # between sub-word 0 and sub-word 1 (its "uneven ending" bookkeeping),
+        # which the iact_stream_constructor accounts for when it packs lines.
+        # Experiment (OPENEYE_IACT_SHIFT=1, off by default): shift an odd
+        # cycle's sub-words by one. It did not fix the odd cycles; the real
+        # cause is that the mapper's odd blocks are one sub-word short.
+        mask = (1 << sub_bits) - 1
+        out = [[[list(lane) for lane in col] for col in row]
+               for row in iact_stream]
+        for row in out:
+            for col in row:
+                for lane in col:
+                    for first in range(block * block_len,
+                                       (block + 1) * block_len,
+                                       words_per_write):
+                        words = lane[first:first + words_per_write]
+                        subs = []
+                        for word in words:
+                            subs += [(word >> (i * sub_bits)) & mask
+                                     for i in range(subs_per_word)]
+                        subs = [0] + subs[:-1]
+                        for n in range(len(words)):
+                            lane[first + n] = sum(
+                                subs[n * subs_per_word + i] << (i * sub_bits)
+                                for i in range(subs_per_word))
+        return out
+
     def write_iact_block(block):
         if not split_iacts:
             return rtl_test_utils.write_iact(
                 ptp, dut, iact_stream, oep, lp)
+        source = (shifted_stream(block)
+                  if block % 2 == 1 and os.environ.get("OPENEYE_IACT_SHIFT")
+                  else iact_stream)
         return rtl_test_utils.write_iact(
-            ptp, dut, iact_stream, oep, lp,
+            ptp, dut, source, oep, lp,
             first_position=block * block_len,
             last_position=(block + 1) * block_len)
 
@@ -263,6 +304,16 @@ async def calculate_layer(ptp, dut, stream, oep, lp, layer_repetition, model, la
         logger.info("iact refill block %d of %d", block, compute_cycles)
         await write_iact_block(block)
         await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+        if os.environ.get("OPENEYE_TRACE_IACT_SPAD"):
+            for _ in range(12):
+                await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+            try:
+                mem = (dut.gen_x[0].gen_y[0].OpenEye_Cluster.pe_cluster
+                       .gen_X[0].gen_Y[1].pe.iact_data_SPad.ram.impl.mem)
+                logger.info("iact spad after block %d: %s", block,
+                            [str(mem[a].value)[-8:] for a in range(12)])
+            except Exception as exc:
+                logger.info("iact spad unreadable (%s)", type(exc).__name__)
 
     status_thread = cocotb.start_soon(rtl_test_utils.send_stream(ptp, dut, stream[layer_repetition], oep, lp, layer_repetition))
     await status_thread
