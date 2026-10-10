@@ -436,6 +436,7 @@ Larger filter counts with more than one channel also fail, and differently:
 | Input channels | Filters | Result |
 |---|---|---|
 | 2 | 18 | fail, about every output differs (2306 log lines for 1152 outputs) |
+| 6 | 6 | fail, about every output differs (770 log lines for 384 outputs); 6 channels need 18 activation values per PE and the SPAD holds 16 |
 | 4 | 9 | fail, all 576 outputs differ (every `f`, 64 each; not a permutation of the reference values); `y = 31` is the only row without a difference |
 
 For comparison 4 x 4 and 2 x 2 pass, and 1 x 12 passes. Per-PE capacity does
