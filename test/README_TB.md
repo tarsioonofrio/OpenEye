@@ -367,6 +367,77 @@ that matters:
 | `test/cocotb_fpga/test_conv_const.py::test_conv_const_single_layer` | One conv layer with constant operands, so each output is a product count. Compute and read-out only, no interlayer step. | ~65 s per case, 6 cases |
 | `test/cocotb_fpga/test_conv_const.py::test_conv_const_two_layers` | Two stacked conv layers (`LAYER=Convolution_Stack`): the only focused test of the interlayer psum->iact write-back, with no pooling layer in between - the MNIST net cannot separate the two. Sweeps c = 1 and 8, because 1 and 2 quantise to the same interlayer byte. | ~65 s per case, 8 cases |
 
+### Parallel top level (`test/cocotb_parallel/`)
+
+| Variable | Effect |
+|---|---|
+| `OPENEYE_TRACE_PE_MACS=1` | One `pemac` line per PE row and clock while a PE computes: activation in use, its tag (`oh`), weight address, weight index, the weight each MAC lane multiplies, the psum address and the product. Works on both tops. |
+| `OPENEYE_CONV_NO_FEEDBACK=1` | Do not feed the previous compute cycle's output back as the next cycle's psum input. With the feedback each row accumulates the previous ones (output `K*(y+1)`). Experiment, off by default. |
+| `OPENEYE_TRACE_IACT_SPAD=1` | After each per-cycle activation block, log the first 12 words of one PE's activation SPAD (column 0, row 1). |
+| `OPENEYE_LOG_INPUT=1` | Log the first row of each of the first four input channels, to compare with the SPAD. |
+| `OPENEYE_IACT_WRITE_GAP=<n>` | Drop `iact_enable` for `n` clocks after each `iact_choose` window. Experiment, off by default. |
+| `OPENEYE_IACT_SHIFT=1` | Shift odd compute cycles' activation sub-words by one. Did not help; off by default. |
+
+## Convolution status (Icarus 13.0)
+
+Measured on Icarus 13.0 (Icarus 12.0 hangs several `cocotb_fpga` tests). Re-run
+before relying on any line; the commits are in `git log`.
+
+### Weight order (fixed)
+
+The activation tags the hardware generates count `channel + C * kernel_row`, so
+the weight address SPAD has to be laid out kernel-row-outer, channel-inner.
+`3dc5c39` had put channels outermost. Patterns that vary along at most two of
+channel, filter and kernel tap sum to the same value either way, which hid it.
+`test_conv_mixed_weights_three_axes` (weights `(c + 4f + 16tap) % 120 + 1`) now
+passes, and `test_conv_const.py` passes 35 of 35 (about 6 minutes).
+
+### FPGA top, one conv layer 32x32, 3x3, `CLUSTER_ROWS=4`
+
+Run `test/cocotb_fpga/test_single_layers.py` with `LAYER=Convolution_Single`.
+Without it the test runs the whole MNIST net and ignores the size parameters.
+
+| Input channels | Filters | Result |
+|---|---|---|
+| 1 | 8 | pass, 59 s |
+| 1 | 12 | pass, 92 s |
+| 2 | 2 | pass, 37 s |
+| 4 | 4 | pass, 59 s |
+| 3 | 4 | fail, 514 value differences, 53 s |
+| 3 | 1, 3 | hang until the timeout (15 min and 50 min) |
+| 2 or 4 | 3 | fail, "X detected in convolution DMA output" |
+
+Three input channels is the failing case; odd filter counts may be a second,
+separate problem. The cause is not found. The `iact_stream_constructor` has
+odd-channel handling, which is the first place to look. Four channels with the
+fourth all zero should give the same numbers as three, as a workaround; not
+tried.
+
+### Parallel top, one conv layer 32x32x4, 8 filters
+
+Still fails: the output no longer hangs (`mapped 4/128 beats` before) but no
+value matches. Found so far:
+
+1. The bare core has no `iact_stream_constructor`, so the testbench has to
+   send each compute cycle its own activation block. It now sends block 0 up
+   front and block `k` before cycle `k` (`send_enable_conv`, the
+   `iact_refill` hook).
+2. The collector fed each cycle's output back as the next cycle's psum input,
+   so rows accumulated (`OPENEYE_CONV_NO_FEEDBACK=1` removes it). Whether the
+   feedback is needed for other cases, such as several channel repetitions, is
+   not known.
+3. With that, the activation SPAD is correct in even cycles. In odd cycles the
+   stream's block starts with a zero sub-word and is one sub-word short, so
+   the last activation of the cycle (the last tap of the last channel) is
+   wrong. The mapper seems to model the pipeline's alternating line alignment
+   (`uneven_ending` in `data_pipeline_iact.v`); not confirmed.
+4. With one channel, even output rows are short by exactly 1 (suspected missing
+   bias in the first cycle, not confirmed) and odd rows are wrong.
+
+Widths below 32 break the collector (`conv_fmap_index_error`), so small
+variants have to keep the width at 32. A parametrisation script must match
+the text of the checked-in test file, not line numbers.
+
 ## References
 
 - Generic Makefile: `test/Makefile`
