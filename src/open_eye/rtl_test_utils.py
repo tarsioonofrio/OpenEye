@@ -4144,6 +4144,39 @@ async def dump_convert_iact_limits(ptp, dut, oep):
             return
 
 
+async def trace_core_iact_inputs(ptp, dut, max_lines=160, give_up_after=60000):
+    """Log what reaches the OpenEye_Parallel core's iact ports, cycle by cycle.
+
+    Works on both tops (the FPGA wrapper exposes the core's ports as
+    ``*_oep_w`` wires), so a passing FPGA run can be compared with the bare
+    Parallel testbench: enable, PE selector and packed data per active cycle.
+    """
+    def read(*names):
+        for name in names:
+            handle = getattr(dut, name, None)
+            if handle is not None:
+                try:
+                    return int(handle.value)
+                except (TypeError, ValueError):
+                    return None
+        return None
+
+    lines = 0
+    for cycle in range(give_up_after):
+        await Timer(ptp.clk_cycle, unit=ptp.clk_cycle_unit)
+        enable = read("iact_enable_i_oep_w", "iact_enable_i")
+        if not enable:
+            continue
+        choose = read("iact_choose_i_oep_w", "iact_choose_i")
+        data = read("iact_data_i_oep_w", "iact_data_i")
+        logger.info("coreiact cyc=%d en=%x choose=%s data=%s", cycle, enable,
+                    "%x" % choose if choose is not None else "?",
+                    "%x" % data if data is not None else "?")
+        lines += 1
+        if lines >= max_lines:
+            return
+
+
 async def trace_iact_lanes(ptp, dut, oep, cluster=0, max_words=40,
                            give_up_after=1200):
     """Record the activation word each iact GLB lane delivers, per cluster.

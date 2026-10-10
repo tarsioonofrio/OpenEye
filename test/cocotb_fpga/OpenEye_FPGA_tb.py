@@ -254,6 +254,8 @@ async def execute_model(dut, only_files, sparse_iacts, sparse_wghts, layer_es, s
         cocotb.start_soon(rtl_test_utils.trace_convert_window(ptp, dut, openeye_parameter))
     if os.environ.get("DUMP_CONVERT_LIMITS"):
         cocotb.start_soon(rtl_test_utils.dump_convert_iact_limits(ptp, dut, openeye_parameter))
+    if os.environ.get("OPENEYE_TRACE_CORE_IACT"):
+        cocotb.start_soon(rtl_test_utils.trace_core_iact_inputs(ptp, dut))
     if os.environ.get("TRACE_IACT_LANES"):
         cocotb.start_soon(rtl_test_utils.trace_iact_lanes(ptp, dut, openeye_parameter))
     if os.environ.get("TRACE_PSUM_SLICES"):

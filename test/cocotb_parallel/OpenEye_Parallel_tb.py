@@ -203,6 +203,9 @@ async def single_layer_test(dut):
             ptp, dut, openeye_parameter
         ))
 
+    if os.environ.get("OPENEYE_TRACE_CORE_IACT"):
+        cocotb.start_soon(rtl_test_utils.trace_core_iact_inputs(ptp, dut))
+
     if os.environ.get("OPENEYE_TRACE_PE_MACS"):
         cocotb.start_soon(rtl_test_utils.trace_pe_macs(
             ptp, dut, openeye_parameter
@@ -217,6 +220,8 @@ async def single_layer_test(dut):
         else:
             layer_parameter = layer_parameters[layer_number]
             time_printer.timestamp("Layer parameters created. ", logger)
+            if os.environ.get("OPENEYE_ZERO_BIAS"):
+                dram.bias[layer_number] = [0 for _ in dram.bias[layer_number]]
             calculated_results = ptu.collect_results(
                 layer_number, layer_parameter, dram, openeye_parameter.SERIAL
             )

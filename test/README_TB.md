@@ -377,6 +377,8 @@ that matters:
 | `OPENEYE_LOG_INPUT=1` | Log the first row of each of the first four input channels, to compare with the SPAD. |
 | `OPENEYE_IACT_WRITE_GAP=<n>` | Drop `iact_enable` for `n` clocks after each `iact_choose` window. Experiment, off by default. |
 | `OPENEYE_IACT_SHIFT=1` | Shift odd compute cycles' activation sub-words by one. Did not help; off by default. |
+| `OPENEYE_ZERO_BIAS=1` | Zero the layer's bias in DRAM before the reference and the streams are built, to tell bias errors from data errors. |
+| `OPENEYE_TRACE_CORE_IACT=1` | One `coreiact` line per active clock with `iact_enable`, `iact_choose` and the packed `iact_data` at the core's input. Works on the FPGA top (`*_oep_w` wires) and on the Parallel top, so a passing FPGA run can be compared with the bare-core testbench. |
 
 ## Convolution status (Icarus 13.0)
 
@@ -472,6 +474,22 @@ value matches. Found so far:
    (`uneven_ending` in `data_pipeline_iact.v`); not confirmed.
 4. With one channel, even output rows are short by exactly 1 (suspected missing
    bias in the first cycle, not confirmed) and odd rows are wrong.
+
+5. `test_fc_layer` (32 to 32, same top) fails too, and did so before the
+   testbench changes (checked at `e0ae900`). With `OPENEYE_ZERO_BIAS=1` the
+   values the DUT returns are exactly right but sit in the wrong slots
+   (`DUT[3]=ref[1]`, `DUT[4]=ref[2]`, `DUT[7]=ref[3]`, slots 1, 2, 5, 6 read 0).
+   Without it every value is also short by `bias`: the bias is not reaching
+   the outputs.
+6. Conv with `OPENEYE_ZERO_BIAS=1` and no feedback: one channel gives correct
+   even output rows and wrong odd rows; four channels give no correct rows.
+7. Comparing the core input of a passing FPGA run (4 channels, 8 filters) with
+   the Parallel testbench (`OPENEYE_TRACE_CORE_IACT=1`): the FPGA delivers
+   bare 8-bit values in the 12-bit sub-words, the Parallel stream carries the
+   `oh` counter in bits 11:8 (`1ea`, `214`, `300`, ...). The FPGA also repeats
+   each router's words for the second `iact_choose` window; the layouts per
+   compute cycle are therefore not the same. Not yet determined which of the
+   differences breaks the result.
 
 Widths below 32 break the collector (`conv_fmap_index_error`), so small
 variants have to keep the width at 32. A parametrisation script must match
