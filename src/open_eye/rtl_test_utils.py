@@ -724,10 +724,12 @@ async def trace_pe_macs(ptp, dut, oep, cl_x=0, cl_y=0, pe_col=0, max_cycles=2000
                 continue
             lanes = range(oep.PARALLEL_MACS)
             logger.info(
-                "pemac r=%d cyc=%d state=%s act=%s wvec=%s valid=%s "
-                "w=%s addr=%s mult=%s",
+                "pemac r=%d cyc=%d state=%s act=%s oh=%s wa=%s wad=%s wvec=%s "
+                "valid=%s w=%s addr=%s mult=%s",
                 pe_row, cycle, read(pe, "current_state_computing"),
                 signed8(read(pe, "iact_data_current_3")),
+                read(pe, "iact_data_spad_oh"), read(pe, "wght_addr_SPad_addr"),
+                read(pe, "wght_addr_SPad_data_r"),
                 read(pe, "wght_data_vec"), read(pe, "values_valid"),
                 [signed8(read(pe, "mult_fac_1", l)) for l in lanes],
                 [read(pe, "psum_spad_addr_r", l) for l in lanes],

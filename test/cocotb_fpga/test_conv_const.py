@@ -278,13 +278,13 @@ def test_conv_tall_writeback(request):
                     bias_step=128)
 
 
-@pytest.mark.xfail(strict=False, reason=(
-    "Weights that vary in channel, filter and kernel tap together give "
-    "outputs that differ from the reference by whole multiples of the "
-    "pattern modulus; each pair of axes passes (tap x channel, tap x filter, "
-    "channel x filter), so the interleave order of the three is wrong."))
 def test_conv_mixed_weights_three_axes(request, monkeypatch):
-    """Constant activations, weights w = (c + 4*f + 16*tap) % 120 + 1."""
+    """Constant activations, weights w = (c + 4*f + 16*tap) % 120 + 1.
+
+    Needs the weight SPAD in kernel-row-outer, channel-inner order, the order
+    of the activation tags the hardware generates; the two orders agree for
+    patterns that vary along at most two of the three axes.
+    """
     monkeypatch.setenv("OPENEYE_MIX_TAP_WEIGHTS", "cf")
     _run_conv_const("Convolution_Single", 1, 2, num_glb_iact=1,
                     input_channels=4, request=request)
