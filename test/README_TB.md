@@ -426,7 +426,10 @@ occupancy (`iact/wght/psum`) was `8/5/0` for both 3 channels x 1 filter and
 5 channels x 2 filters, although the expected counts differ (9 and 15
 activation words), so that counter is not a reliable word count there.
 
-Odd filter counts may be a second, separate problem. The cause is not found. The `iact_stream_constructor` has
+Odd filter counts are a second, separate
+problem: with 1 input channel, 3 and 5 filters fail with 130 reported
+differences each (about one filter's 2 x 32 outputs; for 3 filters they are in
+`f = 2`, the unpaired last filter) while 2, 6, 8 and 12 filters pass. The cause is not found. The `iact_stream_constructor` has
 odd-channel handling, which is the first place to look. Four channels with the
 fourth all zero should give the same numbers as three, as a workaround; not
 tried.
