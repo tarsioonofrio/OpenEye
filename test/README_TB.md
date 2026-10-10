@@ -407,8 +407,26 @@ Without it the test runs the whole MNIST net and ignores the size parameters.
 | 3 | 1, 3 | hang until the timeout (15 min and 50 min) |
 | 2 or 4 | 3 | fail, "X detected in convolution DMA output" |
 
-Three input channels is the failing case; odd filter counts may be a second,
-separate problem. The cause is not found. The `iact_stream_constructor` has
+More runs (same geometry, 2 filters unless noted; `OPENEYE_PROBE_FSM=1
+OPENEYE_FAIL_ON_STALL=20000` stops a hang in about two minutes instead of the
+timeout):
+
+| Input channels | Kernel | Result |
+|---|---|---|
+| 3 (1 filter) | 3x3 | stall in main state 10, psum state 2 |
+| 3 | 2x2 | fail, 258 value differences |
+| 5 | 3x3 | stall in main state 10, psum state 2 |
+| 6 | 3x3 | fail, 258 value differences |
+
+`layer_parameters.py` sets `channel_div_trans = ceil(channels / 2)`: 1 channel
+and 2 channels give 1, 3 and 4 give 2, 5 and 6 give 3. 1, 2 and 4 channels
+pass; 3, 5 and 6 do not, so it is not just odd totals (6 channels, 18 values,
+fails with wrong values rather than a stall). The stall report's per-PE
+occupancy (`iact/wght/psum`) was `8/5/0` for both 3 channels x 1 filter and
+5 channels x 2 filters, although the expected counts differ (9 and 15
+activation words), so that counter is not a reliable word count there.
+
+Odd filter counts may be a second, separate problem. The cause is not found. The `iact_stream_constructor` has
 odd-channel handling, which is the first place to look. Four channels with the
 fourth all zero should give the same numbers as three, as a workaround; not
 tried.
