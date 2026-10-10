@@ -690,17 +690,13 @@ class ConvWghtStreamMapper(WghtStreamMapper):
                     # Wrap to next channel when filter range exhausted
                     if((filters == (start_current_repetition + filters_per_calculation))):
                         filters = start_current_repetition
+                        channel = channel + 1
                         spad_position = spad_position + (spad_position%params.PARALLEL_MACS)
-                        # Match the activation SPAD order: channels are
-                        # outermost, then the kernel row within each channel.
-                        # ``kernel_x`` is the legacy name for the first
-                        # kernel-weight dimension in the DRAM tensor.
+
+                    # Wrap to next kernel X when channels exhausted
+                    if(channel == layer_params.used_channels + channel_offset):
+                        channel = channel_offset
                         kernel_x = kernel_x + 1
-                        if(kernel_x == layer_params.kernel_size[1]):
-                            kernel_x = 0
-                            channel = channel + 1
-                            if(channel == layer_params.used_channels + channel_offset):
-                                channel = channel_offset
 
             # Stop when SPAD is full
             if (words_in_storage == math.ceil(layer_params.used_wght_per_PE/params.PARALLEL_MACS)):
