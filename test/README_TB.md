@@ -431,6 +431,20 @@ problem: with 1 input channel, 3 and 5 filters fail with 130 reported
 differences each (about one filter's 2 x 32 outputs; for 3 filters they are in
 `f = 2`, the unpaired last filter) while 2, 6, 8 and 12 filters pass.
 
+Larger filter counts with more than one channel also fail, and differently:
+
+| Input channels | Filters | Result |
+|---|---|---|
+| 2 | 18 | fail, about every output differs (2306 log lines for 1152 outputs) |
+| 4 | 9 | fail, all 576 outputs differ (every `f`, 64 each; not a permutation of the reference values); `y = 31` is the only row without a difference |
+
+For comparison 4 x 4 and 2 x 2 pass, and 1 x 12 passes. Per-PE capacity does
+not explain 4 x 9 (108 weights fit in `Wghts_per_PE = 192`, 9 psums in 16, 12
+activations in `Iacts_per_PE = 16`). It does explain the 6-channel failure
+(18 activation values per PE) and 2 x 18 takes the "more than 16 filters"
+branch in `layer_parameters.py` (16 psums per PE, extra weight transmissions),
+which none of the passing cases exercise.
+
 Neither cause is found. For the channel problem the `iact_stream_constructor`
 (odd-channel handling) is the first place to look. Four channels with the
 fourth all zero should give the same numbers as three, as a workaround; not
