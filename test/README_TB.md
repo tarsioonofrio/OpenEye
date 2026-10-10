@@ -429,10 +429,13 @@ activation words), so that counter is not a reliable word count there.
 Odd filter counts are a second, separate
 problem: with 1 input channel, 3 and 5 filters fail with 130 reported
 differences each (about one filter's 2 x 32 outputs; for 3 filters they are in
-`f = 2`, the unpaired last filter) while 2, 6, 8 and 12 filters pass. The cause is not found. The `iact_stream_constructor` has
-odd-channel handling, which is the first place to look. Four channels with the
+`f = 2`, the unpaired last filter) while 2, 6, 8 and 12 filters pass.
+
+Neither cause is found. For the channel problem the `iact_stream_constructor`
+(odd-channel handling) is the first place to look. Four channels with the
 fourth all zero should give the same numbers as three, as a workaround; not
-tried.
+tried. For the filter problem, the unpaired filter shares a two-MAC weight word
+with a padding lane; not checked.
 
 ### Parallel top, one conv layer 32x32x4, 8 filters
 
