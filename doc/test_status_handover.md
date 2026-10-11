@@ -219,3 +219,76 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest \
 Disabling pytest plugin autoload avoids an unrelated localhost socket opened
 by pytest-rerunfailures. The convolution reference itself uses multiprocessing
 IPC, so its simulations need permission to create local sockets.
+
+## 8. Consolidated FPGA and Parallel test evidence (2026-10-11)
+
+This section consolidates later runs discussed after the 2026-09-19 milestone.
+The results below are historical evidence from different checkouts and commits;
+they were not all rerun on the current local `HEAD`. Do not interpret this table
+as a green regression for the current branch. The latest remote diagnostic
+baseline recorded for the October convolution investigation was `12f14a3`;
+the current local checkout is a different commit and has pre-existing edits.
+
+### FPGA top (`OpenEye_FPGA`)
+
+`OpenEye_FPGA` includes the DMA, buffers/converters, control FSMs, quantization,
+pooling, and inter-layer write-back around the compute core. A pass here is
+evidence for that exact full-system test/configuration, not automatically for
+`OpenEye_Parallel` alone or for every convolution geometry.
+
+| Test/run | Simulator | Result | What the result establishes |
+|---|---|---|---|
+| `test/cocotb_fpga/test_gemm_layer.py` | Icarus | 26/26 passed in the 2026-09 snapshot | FPGA GEMM/Dense parametrizations at the documented small array/configurations; not convolution coverage. |
+| `test/cocotb_fpga/test_gemm_layer.py::test_gemm_layer[output_stationary-3-4-3-2-32-32-1]` | Icarus | 1 passed; Cocotb reported 13,890 ns | One full-system output-stationary GEMM configuration only. This is a later individual run, not a rerun of all 26 cases. |
+| Focused FPGA GEMM K=8, N=8 configurations | Icarus | 4/4 passed in the 2026-09-19 milestone | Both dataflows crossed with `PARALLEL_MACS` 1 and 2. See section 7. |
+| Focused convolution controls in section 7 | Icarus | 9 focused checks passed, with one distinct configuration still failing | Small dense cases covering single-layer constants, two-layer write-back, ramps/channel order; not the full FPGA convolution suite. The exact coverage is described in section 7. |
+| `test_conv_const.py::test_conv_const_single_layer[1-1]` | Icarus 12.0 on Paxos | Compiled, then stalled near 0.10 ns for about five minutes; terminated | Inconclusive before functional comparison. It is neither a DUT pass nor a functional mismatch. An isolated Icarus/Cocotb smoke test passed separately. |
+| Same focused FPGA convolution attempt through Xcelium shim | Xcelium | Compile/elaboration failed | Generated `dma_storage.v` had undeclared `DMA_BITWIDTH`, `TRANSMISSIONS`, and `PARAMETER_POS_*`; no functional simulation. |
+| Same attempt through Verilator 5.052 | Verilator | Build failed before functional simulation | A build-directory collision occurred first; a separate build then showed missing `regmap_params.vh` and incompatible generated slice syntax in `af_cluster.v`. |
+| `test_conv_const.py` + `test_conv3x3_sparse.py` | Collection only | 130 cases collected; suite not run | Case inventory only, no pass/fail evidence for those 130 cases. |
+
+The 2026-09-19 convolution milestone and the later stalled Icarus attempt are
+not contradictory: they used different configurations and execution contexts.
+The milestone demonstrates specific small configurations; the later attempt
+never reached an output comparison. The FPGA convolution suite therefore
+cannot be summarized as either universally passing or universally failing.
+
+### Parallel and lower-level cluster tests
+
+Test location does not always identify the DUT top: `test_gemm_workload_sv.py`
+is under `cocotb_parallel`, but its SystemVerilog testbench targets
+`OpenEye_FPGA`. Keep it distinct from tests whose DUT is `OpenEye_Parallel`.
+
+| Test/run | DUT top | Simulator | Result | Scope |
+|---|---|---|---|---|
+| `test/cocotb_parallel/test_gemm_mode.py` | `OpenEye_Parallel` | Verilator, Icarus, Xcelium | Passed on all three in prior runs (one test per simulator) | Checks GEMM/output-stationary mode selection and plumbing; not a convolution arithmetic regression. |
+| `test/cocotb_parallel/test_gemm_workload_sv.py` | `OpenEye_FPGA` via SV TB | Xcelium | Passed together with `test_gemm_mode.py`; combined run reported 2 passed | Deterministic full-system GEMM workload in the SV testbench. Only the recorded configuration/run is covered. |
+| `test/cocotb_parallel/test_single_layers.py` | `OpenEye_Parallel` | Xcelium | 1 passed, 4 failed in the recorded suite run | The passing case was pooling. Convolution, two depthwise-convolution cases, and FC failed; exact convolution ID: `[0-4-1-0-0-4-32-3-3-1-8]`. This run does not establish that all failures share one cause. |
+| Direct `test_single_conv_layer` | `OpenEye_Parallel` | Verilator | Failed output comparison around 30,410 ns in a prior run | Functional mismatch for that case/configuration; it is not a passing convolution test. |
+| Direct `test_single_conv_layer` | `OpenEye_Parallel` | Xcelium | Failed output assertion around 5,950 ns in a prior run | Functional mismatch for that case/configuration; separate from simulator compile failures on the FPGA wrapper. |
+| `test/cocotb_PE_cluster` | PE cluster, below the `OpenEye_Parallel` top | Simulator/run recorded previously | 52 passed, 12 failed | Lower-level cluster suite; failures included convolution reproducers and sparse sweeps. This must not be reported as a full `OpenEye_Parallel` or FPGA result. |
+| `test/cocotb_openeye_cluster` sparse reproducer, `PARALLEL_MACS=2`, `SPARSE_WGHT=40`, `SEED=3` | `OpenEye_Cluster` reproducer | Icarus 12.0 on Paxos | Failed output comparison; RTL fix not validated | Trace localized a spurious MAC/psum divergence around a weight-range transition, but did not prove a complete root cause or repair. No broad sweep was run. |
+
+### Reading the combined status
+
+- **Passed:** selected FPGA GEMM cases; the September small FPGA convolution
+  milestone; `test_gemm_mode.py` mode-plumbing checks; and the recorded SV GEMM
+  workload. These are separate tests and tops, not proof that the convolution
+  path works generally.
+- **Failed functionally:** the recorded `OpenEye_Parallel` single-convolution
+  case on Verilator and Xcelium, the `test_single_layers.py` convolution case,
+  and the sparse `OpenEye_Cluster` reproducer. Report each with its own top,
+  simulator, and configuration.
+- **Failed before simulation:** the later FPGA-wrapper Xcelium and Verilator
+  attempts, due to generated HDL parameters/includes/syntax. They say nothing
+  about functional output correctness.
+- **Inconclusive:** the later focused FPGA convolution run on Icarus 12.0,
+  which compiled but did not advance meaningfully in simulation time.
+- **Not run:** the complete 130-case FPGA convolution inventory and a complete
+  current-commit Parallel regression. No current-commit all-green status is
+  established by the historical runs in this section.
+
+The results are historical reports from prior sessions, not fresh reruns in
+this documentation update. The detailed September observations remain in the
+preceding sections; use the run logs/commit of each future regression when
+promoting any item to current status.
