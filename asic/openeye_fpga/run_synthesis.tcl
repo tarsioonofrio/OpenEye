@@ -3,7 +3,14 @@ set FLOW_DIR [file normalize [file dirname [info script]]]
 set REPO_ROOT [file normalize [file join $FLOW_DIR ../..]]
 set HDL_DIR [file join $REPO_ROOT hdl]
 set GEN_DIR [file join $FLOW_DIR results generated]
-set OUT_DIR [file join $FLOW_DIR results]
+if {[info exists ::env(ASIC_FPGA_RESULTS_DIR)]} {
+    set OUT_DIR [file normalize $::env(ASIC_FPGA_RESULTS_DIR)]
+} else {
+    set OUT_DIR [file join $FLOW_DIR results]
+}
+if {[info exists ::env(VH_PATH)]} {
+    set GEN_DIR [file normalize $::env(VH_PATH)]
+}
 file mkdir [file join $OUT_DIR reports]
 file mkdir [file join $OUT_DIR netlist]
 set_db init_hdl_search_path [list $GEN_DIR $FLOW_DIR]

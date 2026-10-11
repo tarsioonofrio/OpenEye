@@ -1,12 +1,12 @@
 # OpenEye_FPGA logical synthesis
 
-This Genus flow synthesizes the FPGA-facing top `OpenEye_FPGA` for the same
-configuration as the official functional convolution smoke test
-`test_official_conv_c2_f6_fpga`: 4×2 clusters, 3×3 PEs per cluster, 20-bit
-partial sums, a 64-bit DMA and the test's `test/cocotb_fpga/regmap.yaml`.
-The RTL's `OpenEye_FPGA` wrapper (DMA, control, and inter-layer buffers) is
-included in the synthesis boundary. This is not a synthesis of only the
-`OpenEye_Parallel` compute core.
+This Genus flow synthesizes the FPGA-facing top `OpenEye_FPGA`, including its
+DMA, control, and inter-layer buffers. By default it elaborates a single
+cluster with a 2×2 PE array, two activation buffers, 20-bit partial sums, a
+64-bit DMA, and the register map in `test/cocotb_fpga/regmap.yaml`. The FPGA
+top defaults to serial PE mode, so this configuration contains four PE
+multipliers in total. This is not a synthesis of only the `OpenEye_Parallel`
+compute core.
 
 Run on Paxos from the repository root:
 
@@ -14,9 +14,22 @@ Run on Paxos from the repository root:
 asic/openeye_fpga/run_synthesis.sh
 ```
 
-The flow creates the parameter headers and DMA decoder under `results/generated`
-using the repo's generators, then writes the mapped database/netlist and area,
-gate, timing, and vectorless-power reports under `results/`.
+The cluster count and PE-array dimensions can be selected through
+`CLUSTER_ROWS`, `CLUSTER_COLUMNS`, `NUM_GLB_PSUM` (PE columns), and
+`NUM_GLB_WGHT` (PE rows). `NUM_GLB_IACT` selects activation buffers. Results
+are kept in a configuration-specific subdirectory; set
+`ASIC_FPGA_RESULTS_DIR` to choose a different output directory. The intended
+array sweep is 6×6, 4×4, 3×3, and 2×2 PEs, with one cluster for a direct
+multiplier-count comparison.
+
+The 2-input-channel, 6-filter convolution is a workload choice. It is not
+encoded as a fixed layer in this logic synthesis; use the same 2×6 workload
+and exact RTL configuration when generating activity for a later power run.
+
+The flow creates the parameter headers and DMA decoder in that configuration's
+`generated/` directory using the repo's generators, then writes the mapped
+database/netlist and area, gate, timing, and vectorless-power reports alongside
+them.
 The script loads the OpenEye pilot's Genus 23.14 module. Latch inference is
 reported rather than treated as fatal because the current FPGA activation
 constructor contains reset-only storage that Genus flags; inspect the Genus log

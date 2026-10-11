@@ -3,15 +3,23 @@ set -euo pipefail
 
 flow_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$flow_dir/../.." && pwd)"
-out_dir="$flow_dir/results"
+cluster_rows="${CLUSTER_ROWS:-1}"
+cluster_columns="${CLUSTER_COLUMNS:-1}"
+num_glb_iact="${NUM_GLB_IACT:-2}"
+num_glb_psum="${NUM_GLB_PSUM:-2}"
+num_glb_wght="${NUM_GLB_WGHT:-2}"
+out_dir="${ASIC_FPGA_RESULTS_DIR:-$flow_dir/results/pe${num_glb_wght}x${num_glb_psum}_clusters-${cluster_rows}x${cluster_columns}}"
 mkdir -p "$out_dir/generated" "$out_dir/reports" "$out_dir/netlist"
+out_dir="$(cd -- "$out_dir" && pwd)"
+export ASIC_FPGA_RESULTS_DIR="$out_dir"
 
 export PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}"
 export TOPLEVEL=OpenEye_FPGA
 export VH_PATH="$out_dir/generated"
 export HDL_PATH="$repo_root/hdl"
-export CLUSTER_ROWS=4 CLUSTER_COLUMNS=2
-export NUM_GLB_IACT=3 NUM_GLB_PSUM=4 NUM_GLB_WGHT=3
+export CLUSTER_ROWS="$cluster_rows" CLUSTER_COLUMNS="$cluster_columns"
+export NUM_GLB_IACT="$num_glb_iact"
+export NUM_GLB_PSUM="$num_glb_psum" NUM_GLB_WGHT="$num_glb_wght"
 export IACT_RAM_CELLS=4 BUFFER_WIDTH=10 BUFFER_WIDTH_WGHT=12
 export BUFFER_WIDTH_PSUM=14 BRANCHES=2 QUANT_AMOUNT=32
 export DATA_PSUM_BITWIDTH=20 TRANS_WORDS=8 DMA_BITWIDTH=64
@@ -30,6 +38,13 @@ if ! command -v genus >/dev/null 2>&1; then
     module load cadence/ddi/231
 fi
 
+rm -f "$out_dir/reports/area.rpt" \
+    "$out_dir/reports/gates.rpt" \
+    "$out_dir/reports/timing.rpt" \
+    "$out_dir/reports/power_vectorless.rpt" \
+    "$out_dir/netlist/OpenEye_FPGA_mapped.db" \
+    "$out_dir/netlist/OpenEye_FPGA_mapped.v"
+cd "$out_dir"
 genus -batch -files "$flow_dir/run_synthesis.tcl" "$@"
 test -s "$out_dir/netlist/OpenEye_FPGA_mapped.db"
 test -s "$out_dir/netlist/OpenEye_FPGA_mapped.v"
