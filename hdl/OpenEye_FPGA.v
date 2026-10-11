@@ -722,7 +722,6 @@ reg [1023:0] fst_path;
   reg        wght_sendable;    // When 1: the weight buffer is allowed to start streaming (gated by PE weight-ready back-pressure).
   reg [12:0] fsm_sending_cycle;// Cycle counter within the send phase; drives weight buffer read pointer and wght_enable_i_reg mask.
   reg [CLUSTERS*NUM_GLB_WGHT-1:0] flat_help_var_send; // Temporary variable for building the wght_enable_i_reg bitmask (blocking assignment).
-  reg [CLUSTERS*NUM_GLB_WGHT-1:0] temp_var;           // Scratch variable used when computing the weight-enable bitmask for partial cluster rows.
   reg [63:0] prepared_iact [31:0]; // Pre-assembled iact words (one per buffer cell); populated in Process 5 for later streaming (currently unused in main path).
   localparam EXTENDEDBITS = 48 - NUM_GLB_WGHT; // Zero-padding width when building flat_help_var_send from a per-row weight-enable mask.
 
@@ -1144,7 +1143,6 @@ end
       fc_readout_elapsed          <= 0;
       fc_compute_pending          <= 0;
       wght_sendable               <= 0;
-      flat_help_var_send           = 0;
       for (a = 0; a < IACT_RAM_CELLS; a=a+1) begin
         prepared_iact[a] <= 0;
       end
@@ -1194,14 +1192,12 @@ end
             flat_help_var_send = 0;
             for (a = 0; a < CLUSTER_ROWS; a=a+1) begin
               if ((a * (NUM_GLB_PSUM * CLUSTER_COLUMNS)) <= pagu_wght_limit - 1) begin
-                temp_var = {{EXTENDEDBITS{1'b0}}, {NUM_GLB_WGHT{1'b1}}};
-                flat_help_var_send = flat_help_var_send + (temp_var << (a * NUM_GLB_WGHT));
-                temp_var = 0;
+                flat_help_var_send = flat_help_var_send +
+                    ({{EXTENDEDBITS{1'b0}}, {NUM_GLB_WGHT{1'b1}}} << (a * NUM_GLB_WGHT));
               end
             end
             flat_help_var_send = flat_help_var_send + (flat_help_var_send << (CLUSTER_ROWS * NUM_GLB_WGHT));
             wght_enable_i_reg <= flat_help_var_send[CLUSTERS*NUM_GLB_WGHT-1:0];
-            flat_help_var_send = 0;
             if (fully_connected_layer) begin
               wght_enable_i_reg <= {{CLUSTERS{{NUM_GLB_WGHT{1'b1}}}}};
             end
@@ -1265,7 +1261,6 @@ end
         fc_readout_elapsed  <= 0;
         fc_compute_pending  <= 0;
         wght_sendable       <= 1;
-        flat_help_var_send = 0;
         for (a = 0; a < IACT_RAM_CELLS; a=a+1) begin
           prepared_iact[a] <= 0;
         end
@@ -1286,7 +1281,6 @@ end
         fc_readout_elapsed             <= 0;
         fc_compute_pending             <= 0;
         wght_sendable                  <= 1;
-        flat_help_var_send              = 0;
         for (a = 0; a < CLUSTER_COLUMNS; a=a+1) begin
           for (b = 0; b < CLUSTER_ROWS; b=b+1) begin
             iact_converter_en_enc_reg[a][b] <= 0;
@@ -1294,7 +1288,6 @@ end
         end
       end
     end
-    temp_var = 0;
   end
 
   // --- DMA output staging registers (main FSM Process 6) ---
