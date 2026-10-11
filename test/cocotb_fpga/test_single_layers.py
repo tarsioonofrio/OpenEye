@@ -134,6 +134,38 @@ def test_single_conv_layer(
 
     
 
+def test_official_conv_c2_f6_fpga(monkeypatch, request):
+    """Official dense convolution smoke workload for OpenEye_FPGA.
+
+    Keep this fixed workload as the functional reference case for later
+    activity-based power experiments. It validates the FPGA wrapper; an ASIC
+    power run still needs a separately validated OpenEye_Parallel simulation.
+    """
+    monkeypatch.setenv("LAYER", "Convolution_Single")
+    monkeypatch.setenv("OPENEYE_LAYER_SEED", "123")
+    monkeypatch.setenv("OPENEYE_EXPECT_LAYERS", "1")
+
+    test_single_conv_layer(
+        NUM_FILTERS=6,
+        STRIDE=1,
+        KERNEL_SIZE_X=3,
+        KERNEL_SIZE_Y=3,
+        INPUT_SIZE_X=32,
+        INPUT_SIZE_Y=32,
+        INPUT_CHANNELS=2,
+        USE_SPARSE_IACTS=0,
+        USE_SPARSE_WGHTS=0,
+        USE_RANDOM_VALUES=1,
+        CLUSTER_ROWS=4,
+        NUM_GLB_IACT=3,
+        NUM_GLB_PSUM=4,
+        NUM_GLB_WGHT=3,
+        LOGGER_LEVEL=0,
+        request=request,
+    )
+
+
+
 if __name__ == '__main__':
     test_single_conv_layer(NUM_FILTERS=16, STRIDE=1, KERNEL_SIZE_X=3, KERNEL_SIZE_Y=3, INPUT_SIZE_X=32, INPUT_SIZE_Y=1,
         INPUT_CHANNELS=4, USE_SPARSE_IACTS=0, USE_SPARSE_WGHTS=0, USE_RANDOM_VALUES=1,
