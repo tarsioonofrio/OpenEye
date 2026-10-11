@@ -17,6 +17,10 @@ asic/openeye_fpga/run_synthesis.sh
 The flow creates the parameter headers and DMA decoder under `results/generated`
 using the repo's generators, then writes the mapped database/netlist and area,
 gate, timing, and vectorless-power reports under `results/`.
+The script loads the OpenEye pilot's Genus 23.14 module. Latch inference is
+reported rather than treated as fatal because the current FPGA activation
+constructor contains reset-only storage that Genus flags; inspect the Genus log
+before treating the netlist as implementation-ready.
 
 The three `*_generic` RAM modules are synthesis black boxes. Their storage and
 access logic are excluded from standard-cell area and power. The surrounding

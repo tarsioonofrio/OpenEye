@@ -27,7 +27,7 @@ python "$repo_root/src/open_eye/generator.py" \
 if ! command -v genus >/dev/null 2>&1; then
     source /etc/profile.d/modules.sh
     module use /soft64/modulefiles
-    module load cadence/genus/211
+    module load cadence/ddi/231
 fi
 
 genus -batch -files "$flow_dir/run_synthesis.tcl" "$@"
