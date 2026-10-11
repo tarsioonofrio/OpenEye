@@ -242,16 +242,20 @@ evidence for that exact full-system test/configuration, not automatically for
 | `test/cocotb_fpga/test_gemm_layer.py::test_gemm_layer[output_stationary-3-4-3-2-32-32-1]` | Icarus | 1 passed; Cocotb reported 13,890 ns | One full-system output-stationary GEMM configuration only. This is a later individual run, not a rerun of all 26 cases. |
 | Focused FPGA GEMM K=8, N=8 configurations | Icarus | 4/4 passed in the 2026-09-19 milestone | Both dataflows crossed with `PARALLEL_MACS` 1 and 2. See section 7. |
 | Focused convolution controls in section 7 | Icarus | 9 focused checks passed, with one distinct configuration still failing | Small dense cases covering single-layer constants, two-layer write-back, ramps/channel order; not the full FPGA convolution suite. The exact coverage is described in section 7. |
+| `test/cocotb_fpga/test_conv_const.py` plus `test_conv_mixed_weights_three_axes` | Icarus 13.0 (result recorded in `test/README_TB.md`, commit `990fec3`) | `test_conv_const.py`: 35/35 passed; the three-axis mixed-weight reproducer passed | Strong evidence that the FPGA convolution datapath worked for these tested regressions after correcting kernel-row/channel weight order. This is a historical run recorded in the repository, not rerun during this handover. |
+| `test/cocotb_fpga/test_single_layers.py`, 32×32 input, 3×3 kernel, `CLUSTER_ROWS=4` | Icarus 13.0 (same recorded snapshot) | Passed: C=1/F=8, C=1/F=12, C=2/F=2, C=4/F=4. Failed: C=3/F=4 (514 differences), C=3/F=1 or 3 (timeout), C=2 or 4/F=3 (X in DMA output). | Confirms successful single-layer FPGA convolution for several supported shapes, while documenting important channel/filter configurations that still failed. |
 | `test_conv_const.py::test_conv_const_single_layer[1-1]` | Icarus 12.0 on Paxos | Compiled, then stalled near 0.10 ns for about five minutes; terminated | Inconclusive before functional comparison. It is neither a DUT pass nor a functional mismatch. An isolated Icarus/Cocotb smoke test passed separately. |
 | Same focused FPGA convolution attempt through Xcelium shim | Xcelium | Compile/elaboration failed | Generated `dma_storage.v` had undeclared `DMA_BITWIDTH`, `TRANSMISSIONS`, and `PARAMETER_POS_*`; no functional simulation. |
 | Same attempt through Verilator 5.052 | Verilator | Build failed before functional simulation | A build-directory collision occurred first; a separate build then showed missing `regmap_params.vh` and incompatible generated slice syntax in `af_cluster.v`. |
 | `test_conv_const.py` + `test_conv3x3_sparse.py` | Collection only | 130 cases collected; suite not run | Case inventory only, no pass/fail evidence for those 130 cases. |
 
-The 2026-09-19 convolution milestone and the later stalled Icarus attempt are
-not contradictory: they used different configurations and execution contexts.
-The milestone demonstrates specific small configurations; the later attempt
-never reached an output comparison. The FPGA convolution suite therefore
-cannot be summarized as either universally passing or universally failing.
+The recorded Icarus 13.0 convolution passes, the 2026-09-19 milestone, and the
+later stalled Icarus 12.0 attempt are not contradictory: they used different
+simulator versions, configurations, and execution contexts. The Icarus 13.0
+record demonstrates successful FPGA convolution on a meaningful subset, not
+universal support. The later Icarus 12.0 attempt never reached an output
+comparison. The FPGA convolution suite therefore cannot be summarized as
+either universally passing or universally failing.
 
 ### Parallel and lower-level cluster tests
 
@@ -266,6 +270,7 @@ is under `cocotb_parallel`, but its SystemVerilog testbench targets
 | `test/cocotb_parallel/test_single_layers.py` | `OpenEye_Parallel` | Xcelium | 1 passed, 4 failed in the recorded suite run | The passing case was pooling. Convolution, two depthwise-convolution cases, and FC failed; exact convolution ID: `[0-4-1-0-0-4-32-3-3-1-8]`. This run does not establish that all failures share one cause. |
 | Direct `test_single_conv_layer` | `OpenEye_Parallel` | Verilator | Failed output comparison around 30,410 ns in a prior run | Functional mismatch for that case/configuration; it is not a passing convolution test. |
 | Direct `test_single_conv_layer` | `OpenEye_Parallel` | Xcelium | Failed output assertion around 5,950 ns in a prior run | Functional mismatch for that case/configuration; separate from simulator compile failures on the FPGA wrapper. |
+| One convolution layer, 32×32×4 input, 8 filters | `OpenEye_Parallel` | Icarus 13.0 (recorded in `test/README_TB.md`, commit `990fec3`) | Still failed; no output matched the reference | The positive Icarus 13.0 FPGA results above do not transfer to the bare Parallel core/testbench. The testbench activation schedule and core interface differ from the FPGA wrapper. |
 | `test/cocotb_PE_cluster` | PE cluster, below the `OpenEye_Parallel` top | Simulator/run recorded previously | 52 passed, 12 failed | Lower-level cluster suite; failures included convolution reproducers and sparse sweeps. This must not be reported as a full `OpenEye_Parallel` or FPGA result. |
 | `test/cocotb_openeye_cluster` sparse reproducer, `PARALLEL_MACS=2`, `SPARSE_WGHT=40`, `SEED=3` | `OpenEye_Cluster` reproducer | Icarus 12.0 on Paxos | Failed output comparison; RTL fix not validated | Trace localized a spurious MAC/psum divergence around a weight-range transition, but did not prove a complete root cause or repair. No broad sweep was run. |
 
