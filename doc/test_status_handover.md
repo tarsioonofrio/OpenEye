@@ -336,3 +336,32 @@ The replay confirms the pass/fail partition in the README for these nine C/F
 pairs. The C=3/F=4 failure mode/count is not an exact reproduction of the old
 514-value report. The 20,000-cycle detector deliberately replaces the much
 longer simulation timeout for the two stalled configurations.
+
+## 10. Paired `C=2/F=6` convolution on FPGA and Parallel (2026-10-11)
+
+The same one-layer geometry was run through both tops on Paxos using Icarus
+12.0, 32×32 input, 3×3 kernel, stride 1, dense random operands,
+`CLUSTER_ROWS=4`, and `NUM_GLB_IACT/PSUM/WGHT=3/4/3`:
+
+| DUT top | Test path | Result | Runtime |
+|---|---|---|---|
+| `OpenEye_FPGA` | `test/cocotb_fpga/test_single_layers.py`, `LAYER=Convolution_Single` | **Passed**, 1 Cocotb test | 101,290 ns simulated; 37.31 s wall |
+| `OpenEye_Parallel` | `test/cocotb_parallel/test_single_layers.py::test_single_conv_layer`, called directly with `C=2/F=6` | **Failed** at `compare_dram_with_ref` after completing output | 34,590 ns simulated; 30.94 s wall |
+
+The FPGA run is recorded at
+`test/.temp/historical_990fec3_C2_F6_32x32_CR4/cocotb_sim.log`; the Parallel
+result XML is
+`test/.temp/historical_parallel_C2_F6_32x32_CR4_icarus12/cud2jjk3_results.xml`.
+Both runs used checkout `90456ea`; its `hdl/` tree matches `990fec3`, but these
+are not runs from the exact `990fec3` testbench snapshot. The FPGA run set
+`OPENEYE_LAYER_SEED=123`; the Parallel Cocotb process used random seed
+`1791756507` (from its result XML). Therefore the geometry and hardware
+configuration match, but the generated operands were not held bit-identical
+between runs; each test compared its DUT output against its own reference.
+
+This paired result confirms that the FPGA-wrapper pass does not establish a
+pass for the direct `OpenEye_Parallel` test. The direct test completed and
+produced outputs, but they did not match its reference. It does not by itself
+locate the mismatch in the core versus the different input/collection path of
+the testbench, and it does not imply that all `OpenEye_Parallel` convolution
+shapes fail.
