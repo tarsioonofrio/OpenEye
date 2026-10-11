@@ -2,7 +2,7 @@
 // Do not include this file in functional simulation: it intentionally models
 // neither the contents nor the read behavior of the memories.
 
-(* black_box *) module RAM_SP_generic #(
+module RAM_SP_generic #(
     parameter AddrWidth = 12,
     parameter DataWidth = 8,
     parameter Pipelined = 0,
@@ -18,7 +18,7 @@
 );
 endmodule
 
-(* black_box *) module RAM_DP_generic #(
+module RAM_DP_generic #(
     parameter AddrWidth = 12,
     parameter DataWidth = 8,
     parameter Pipelined = 0
@@ -34,7 +34,7 @@ endmodule
 );
 endmodule
 
-(* black_box *) module RAM_DP_RW_generic #(
+module RAM_DP_RW_generic #(
     parameter AddrWidth = 16,
     parameter DataWidth = 32,
     parameter Pipelined = 0

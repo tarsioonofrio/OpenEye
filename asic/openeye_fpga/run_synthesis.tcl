@@ -26,6 +26,7 @@ read_physical -lefs "${TECH_PATH}/lef/tsmcn28_9lm5X1Y1Z1UUTRDL.tlef ${TECH_PATH}
 set_db interconnect_mode ple
 set_db hdl_error_on_latch true
 set_db hdl_parameter_naming_style ""
+set_db hdl_enable_real_support true
 
 set source_files [glob -nocomplain [file join $HDL_DIR *.v] [file join $HDL_DIR *.sv]]
 set filtered_sources [list]
