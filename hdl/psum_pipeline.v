@@ -177,6 +177,29 @@ module psum_pipeline #(
   wire [TRANS_BITWIDTH_PSUM*TRANS_WORDS-1:0] pre_quantized_value_flat;
   wire [8-1:0] quant_result[TRANS_WORDS-1:0];
   reg [TRANS_BITWIDTH_PSUM*CLUSTERS*NUM_GLB_PSUM-1:0] psum_buffer_data_temp_reg;
+
+  function automatic psum_readiness;
+    input [CLUSTERS*NUM_GLB_PSUM-1:0] ready_vector;
+    input [ROUTER_MODES_PSUM*CLUSTERS*NUM_GLB_PSUM-1:0] router_modes;
+    integer cc, cr, gg;
+    reg all_ready;
+    begin
+      all_ready = 1'b1;
+      for (cc = 0; cc < CLUSTER_COLUMNS; cc = cc + 1) begin
+        for (cr = 0; cr < CLUSTER_ROWS; cr = cr + 1) begin
+          for (gg = 0; gg < (NUM_GLB_PSUM+1)/2; gg = gg + 1) begin
+            all_ready = all_ready &
+                (ready_vector[cc*NUM_GLB_PSUM+cr*CLUSTER_COLUMNS*NUM_GLB_PSUM+gg*2] |
+                 ((router_modes[cc*NUM_GLB_PSUM*ROUTER_MODES_PSUM+
+                                cr*CLUSTER_COLUMNS*NUM_GLB_PSUM*ROUTER_MODES_PSUM+
+                                gg*ROUTER_MODES_PSUM*2+2] == 0) & (CLUSTER_ROWS != 1)));
+          end
+        end
+      end
+      psum_readiness = all_ready;
+    end
+  endfunction
+
   // Convolution emits PSUM_OUTPUT_WORDS tightly packed accumulator values
   // per DMA beat, with unused high DMA bits zero. Advancing by DMA_BITWIDTH
   // drops bits whenever the accumulator width is less than a DMA slot.
@@ -426,7 +449,7 @@ module psum_pipeline #(
         end
 
         WAIT_TO_SEND_READY_SIGNAL: begin
-          results_ready = 0;
+          results_ready <= 0;
           if ((wght_enable_i_reg == 0) & (iact_enable_i_oep_w == 0)) begin
             fsm_psum_cycle <= fsm_psum_cycle + 1;
           end
@@ -447,17 +470,10 @@ module psum_pipeline #(
           end
           psum_buffer_en_r <= {(((NUM_GLB_PSUM*CLUSTERS)+1)/2){1'd1}};
           if ((results_ready == 0) & (psum_ready_i_reg != 0)) begin
-            results_ready = 1;
-            for (cc_psum = 0; cc_psum < CLUSTER_COLUMNS; cc_psum = cc_psum + 1) begin
-              for (cr_psum = 0; cr_psum < CLUSTER_ROWS; cr_psum = cr_psum + 1) begin
-                for (g_psum = 0; g_psum < (NUM_GLB_PSUM+1)/2; g_psum = g_psum + 1) begin
-                  results_ready = results_ready & (psum_ready_o_reg[cc_psum*NUM_GLB_PSUM+cr_psum*CLUSTER_COLUMNS*NUM_GLB_PSUM+g_psum*2] |
-                   ((router_mode_psum[cc_psum * NUM_GLB_PSUM * ROUTER_MODES_PSUM + cr_psum * CLUSTER_COLUMNS * NUM_GLB_PSUM * ROUTER_MODES_PSUM + g_psum * ROUTER_MODES_PSUM * 2 + 2] == 0) & (CLUSTER_ROWS != 1)));
-                end
-              end
-            end
+            results_ready <= psum_readiness(psum_ready_o_reg, router_mode_psum);
           end
-          if (results_ready & (psum_ready_i_reg != 0)) begin
+          if ((results_ready | psum_readiness(psum_ready_o_reg, router_mode_psum)) &
+              (psum_ready_i_reg != 0)) begin
             fsm_psum_cycle  <= fsm_psum_cycle + 1;
             psum_data_i_reg <= psum_buffer_data_r;
             for (cc_psum = 0; cc_psum < CLUSTER_COLUMNS; cc_psum = cc_psum + 1) begin
@@ -519,8 +535,6 @@ module psum_pipeline #(
                 if (psum_buffer_en_w[cc_psum*((NUM_GLB_PSUM+1)/2)+cr_psum*CLUSTER_COLUMNS*((NUM_GLB_PSUM+1)/2)+g_psum]) begin
                   psum_buffer_addr_array[cc_psum][cr_psum][g_psum] <= psum_buffer_addr_array[cc_psum][cr_psum][g_psum] + 1;
                 end
-                results_ready = results_ready & (psum_enable_o[cc_psum*NUM_GLB_PSUM+cr_psum*CLUSTER_COLUMNS*NUM_GLB_PSUM+g_psum * 2] |
-                ((router_mode_psum[cc_psum * NUM_GLB_PSUM * ROUTER_MODES_PSUM + cr_psum * CLUSTER_COLUMNS * NUM_GLB_PSUM * ROUTER_MODES_PSUM + g_psum * ROUTER_MODES_PSUM * 2 + 2] == 0) & (CLUSTER_ROWS != 1)));
                 // Row-major, as OpenEye_Parallel drives psum_enable_o and as the
                 // results_ready term above already reads it. The column-major
                 // form looked at bit 8 for cluster (col 1, row 0) whose enable
@@ -533,7 +547,7 @@ module psum_pipeline #(
               end
             end
           end
-          if (results_ready) begin
+          if (psum_readiness(psum_enable_o, router_mode_psum)) begin
             psum_router_set_reg <= 0;
             fsm_psum_cycle      <= fsm_psum_cycle + 1;
           end
