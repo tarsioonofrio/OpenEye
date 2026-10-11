@@ -297,3 +297,42 @@ The results are historical reports from prior sessions, not fresh reruns in
 this documentation update. The detailed September observations remain in the
 preceding sections; use the run logs/commit of each future regression when
 promoting any item to current status.
+
+## 9. Replay of the 2026-10-10 convolution report (2026-10-11)
+
+The report in `test/README_TB.md` was replayed on Paxos at the exact commit
+`990fec323bc0494aef2e09c852b8a77fe9b36d6f`. The working branch was restored to
+`main` afterward; pre-existing uncommitted diagnostic changes were restored
+unchanged. No tracked RTL or test source was edited for this replay.
+
+Icarus 13.0 was built from the official `v13_0` tag in `/tmp` because no Icarus
+module was available. Cocotb 2.1 ran from the project venv. PyTorch and ONNX
+were absent, so the first attempt failed before Cocotb initialized: the runner
+selected system Python and raised `ModuleNotFoundError: No module named
+'torch'`. Re-running with the venv first in `PATH` and the existing temporary
+stubs for unused ONNX/PyTorch imports reached the actual testbench. Those
+imports are unused by these randomly generated layer tests.
+
+| Replay | Result | Notes |
+|---|---|---|
+| `test/cocotb_fpga/test_conv_const.py` | **35 passed** in 370.54 s | Exact checkout at `990fec3`; includes the three-axis mixed-weight reproducer. Confirms the full recorded 35-case test file on this run. |
+| Single-layer 32×32 matrix from the README | **4 passed, 5 failed** | The checked-in `test_single_layers.py` fixes its decorator values, so a temporary pytest adapter outside the repository called the same test function with the README's C/F pairs. No tracked source changed. Parameters: 32×32, 3×3, stride 1, dense random operands, `CLUSTER_ROWS=4`, `NUM_GLB_IACT=3`, `NUM_GLB_PSUM=4`, `NUM_GLB_WGHT=3`. |
+
+Matrix detail:
+
+| Input channels | Filters | Replay result |
+|---:|---:|---|
+| 1 | 8 | Pass |
+| 1 | 12 | Pass |
+| 2 | 2 | Pass |
+| 4 | 4 | Pass |
+| 3 | 4 | Failed comparison against the reference; the log also reported an output/reference line-width mismatch (64 characters received versus 60 expected). The previously recorded count of 514 differing values did not reproduce exactly. |
+| 3 | 1 | Failed the diagnostic stall limit at 20,000 cycles; FSM remained at main state 10, psum state 2. |
+| 3 | 3 | Failed the diagnostic stall limit at 20,000 cycles; FSM remained at main state 10, psum state 2. |
+| 2 | 3 | Failed: `X detected in convolution DMA output`. |
+| 4 | 3 | Failed: `X detected in convolution DMA output`. |
+
+The replay confirms the pass/fail partition in the README for these nine C/F
+pairs. The C=3/F=4 failure mode/count is not an exact reproduction of the old
+514-value report. The 20,000-cycle detector deliberately replaces the much
+longer simulation timeout for the two stalled configurations.
