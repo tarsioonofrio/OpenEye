@@ -205,8 +205,13 @@ module psum_pipeline #(
   // drops bits whenever the accumulator width is less than a DMA slot.
   localparam CONV_DMA_PAYLOAD_WIDTH = PSUM_OUTPUT_WORDS * TRANS_BITWIDTH_PSUM;
   localparam CONV_BIAS_CYCLES = (CLUSTERS * NUM_GLB_PSUM + PSUM_OUTPUT_WORDS - 1) / PSUM_OUTPUT_WORDS;
+  // The fully-connected path consumes one DMA beat from the flattened PSUM
+  // vector. Assigning to a DMA-width wire safely zero-extends small arrays and
+  // truncates wider arrays; a fixed [0+:DMA_BITWIDTH] part-select is out of
+  // range for small PE configurations (for example, one 2x2 cluster).
+  wire [DMA_BITWIDTH-1:0] psum_fc_dma_word = psum_buffer_data_temp_reg;
   wire [DMA_BITWIDTH-1:0] psum_dma_word = fully_connected_layer ?
-      psum_buffer_data_temp_reg[0+:DMA_BITWIDTH] :
+      psum_fc_dma_word :
       {{(DMA_BITWIDTH-CONV_DMA_PAYLOAD_WIDTH){1'b0}},
        psum_buffer_data_temp_reg[0+:CONV_DMA_PAYLOAD_WIDTH]};
 
