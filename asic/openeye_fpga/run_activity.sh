@@ -33,11 +33,17 @@ export OPENEYE_LAYER_SEED=123
 
 cd "$repo_root"
 export PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}"
-.venv/bin/python -m pytest -x -q -s \
-    test/cocotb_fpga/test_single_layers.py::test_power_activity_official_conv_c2_f6_fpga
+if ! .venv/bin/python -m pytest -x -q -s \
+    test/cocotb_fpga/test_single_layers.py::test_power_activity_official_conv_c2_f6_fpga \
+    > "$sim_dir/pytest.log" 2>&1; then
+    cat "$sim_dir/pytest.log"
+    exit 1
+fi
+cat "$sim_dir/pytest.log"
 
-test -s "$sim_dir/dut.shm/Design.dsn"
+test -s "$sim_dir/dut.shm/dut.dsn"
+test -s "$sim_dir/dut.shm/dut.trn"
 test -s "$sim_dir/cocotb_sim.log"
-grep -q 'TESTS=1 PASS=1 FAIL=0' "$sim_dir/cocotb_sim.log"
+grep -q 'TESTS=1 PASS=1 FAIL=0' "$sim_dir/pytest.log"
 echo "Validated SHM: $sim_dir/dut.shm"
 echo "Parameters: PE=$pe_shape clusters=1x2 MACs/PE=1 SERIAL=1 clock=2ns workload=C2/F6/32x32/kernel3x3/seed123"

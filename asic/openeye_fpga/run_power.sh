@@ -16,7 +16,7 @@ sim_dir="$out_dir/activity/rtl_sim"
 export ASIC_FPGA_RESULTS_DIR="$out_dir"
 export OPENEYE_SHM OPENEYE_DUT_INSTANCE
 
-test -s "$OPENEYE_SHM/Design.dsn" || {
+test -s "$OPENEYE_SHM/dut.dsn" || {
     echo "Validated Xcelium SHM not found: $OPENEYE_SHM" >&2
     echo "Run asic/openeye_fpga/run_activity.sh first." >&2
     exit 2
