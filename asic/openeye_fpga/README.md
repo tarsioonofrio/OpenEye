@@ -47,6 +47,12 @@ The flow creates the parameter headers and DMA decoder in that configuration's
 `generated/` directory using the repo's generators, then writes the mapped
 database/netlist and area, gate, timing, and vectorless-power reports alongside
 them.
+
+The completed synthesis results for these two configurations are summarized in
+[`RESULTS_C2F6_MACS1.md`](RESULTS_C2F6_MACS1.md). The mapped netlists and full
+Genus reports remain in their configuration-specific `results/` directories on
+Paxos; they are generated artifacts and are not tracked by Git.
+
 The script loads the OpenEye pilot's Genus 23.14 module. Latch inference is
 reported rather than treated as fatal because the current FPGA activation
 constructor contains reset-only storage that Genus flags; inspect the Genus log
