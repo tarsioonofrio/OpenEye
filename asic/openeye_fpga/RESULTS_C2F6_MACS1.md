@@ -39,6 +39,44 @@ foram abstratizados; portanto, esses valores cobrem a lógica mapeada e não
 caracterizam potência ou área das macros de memória. Não usar esses números como
 resultado final de comparação de potência com FastConv.
 
+## Potência com atividade do workload
+
+Depois da simulação funcional Xcelium do workload C=2/F=6 a 2 ns, o SHM foi
+mapeado para a netlist Genus com RTLStim2Gate. O relatório de cada configuração
+usa a janela completa da simulação, desde 0 ns até o fim do teste; ela inclui
+inicialização, transferências, cálculo e leitura dos resultados. Os dois testes
+passaram com `TESTS=1 PASS=1 FAIL=0`.
+
+| Métrica | 4×3 | 4×4 |
+| --- | ---: | ---: |
+| Clock | 2 ns (500 MHz) | 2 ns (500 MHz) |
+| Duração simulada | 37.924 ns (18.962 ciclos) | 38.692 ns (19.346 ciclos) |
+| Leakage | 0,3519 mW | 0,4249 mW |
+| Dinâmica interna | 32,2952 mW | 38,1572 mW |
+| Switching | 1,0710 mW | 1,0817 mW |
+| Total reportado | **33,7181 mW** | **39,6638 mW** |
+
+São estimativas médias de potência da lógica standard mapeada de
+`OpenEye_FPGA`, no corner TT, 0,90 V / 25 °C e interconexão `ple`. Não incluem
+potência física das memórias RAM, que permanecem abstracts sem área/potência,
+nem árvore de clock pós-placement: a categoria `clock` do relatório é zero.
+Também não há placement nem routing neste fluxo.
+
+O mapeamento RTL→gate concluiu sem erro e não emitiu o aviso `STIM-0551` de
+RTLStim2Gate desabilitado. Ainda assim, a cobertura direta do relatório de
+anotação é parcial: as portas primárias ficaram em 100%, os outputs de flop em
+100% (com 64 pins desconectados) e os nets drivers do netlist em 32,11% (4×3)
+e 31,41% (4×4); os nets drivers RTL ficaram em 63,69% e 63,81%. Permaneceram
+avisos `TUI-94` sobre pins hierárquicos `data_stream_i` não dirigidos, além de
+warnings de largura de sinal na elaboração RTL. Portanto, mantenha os valores
+como estimativas baseadas em atividade, com cobertura parcial. Não os trate
+como comparação quantitativa final com FastConv até alinhar a cobertura de
+anotação, janela de atividade e fronteira de memória dos dois fluxos.
+
+Os relatórios completos `reports/power_activity.rpt` estão junto dos demais
+relatórios em cada diretório de configuração. SHM, logs, bancos Genus `.db` e
+outros artefatos binários ficam somente na Paxos.
+
 ## Escopo e avisos
 
 - O topo sintetizado é `OpenEye_FPGA`: inclui DMA, controle e buffers entre
@@ -76,5 +114,5 @@ Genus `.db` é binário e permanece na Paxos, fora do Git:
 
 Cada diretório versionado contém `generated/parameters_FPGA.vh`,
 `netlist/OpenEye_FPGA_mapped.v` e
-`reports/{area,gates,timing,power_vectorless}.rpt`. O arquivo binário
+`reports/{area,gates,timing,power_vectorless,power_activity}.rpt`. O arquivo binário
 `OpenEye_FPGA_mapped.db` continua disponível somente na Paxos.
