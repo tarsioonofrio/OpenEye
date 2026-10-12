@@ -105,7 +105,7 @@ NUM_GLB_IACT=3 NUM_GLB_PSUM=4 NUM_GLB_WGHT=4 \
   asic/openeye_fpga/run_synthesis.sh
 ```
 
-Os netlists mapeados em Verilog, o cabeçalho de parâmetros do topo e os quatro
+Os netlists mapeados em Verilog, o cabeçalho de parâmetros do topo e os cinco
 relatórios completos do Genus estão versionados nos diretórios abaixo. O banco
 Genus `.db` é binário e permanece na Paxos, fora do Git:
 

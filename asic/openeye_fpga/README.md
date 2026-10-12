@@ -48,9 +48,9 @@ The flow creates the parameter headers and DMA decoder in that configuration's
 database/netlist and area, gate, timing, and vectorless-power reports alongside
 them.
 
-The completed synthesis results for these two configurations are summarized in
+The synthesis and activity-power results for these two configurations are summarized in
 [`RESULTS_C2F6_MACS1.md`](RESULTS_C2F6_MACS1.md). The mapped Verilog netlists,
-the `parameters_FPGA.vh` used for each run, and all four full Genus reports are
+the `parameters_FPGA.vh` used for each run, and all five full Genus reports are
 tracked under their configuration-specific `results/` directories. The binary
 Genus `.db` databases remain on Paxos and are not tracked. To conserve space,
 the Paxos results directory retains only these two official runs; older FPGA
