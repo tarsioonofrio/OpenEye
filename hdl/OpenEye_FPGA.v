@@ -2975,25 +2975,59 @@ end
     for (i_gen = 0; i_gen < CLUSTER_COLUMNS; i_gen=i_gen+1) begin : PSUM_RAM_X
       for (j_gen = 0; j_gen < CLUSTER_ROWS; j_gen=j_gen+1) begin : PSUM_RAM_Y
         for (g_gen = 0; g_gen < (NUM_GLB_PSUM+1)/2; g_gen=g_gen+1) begin : PSUM_RAM_GLB
-          RAM_SP #(
-              .DataWidth(PSUM_BUFFER_WIDTH),
-              .AddrWidth(BUFFER_WIDTH_PSUM),
-              .Pipelined(1)
-          ) psum_buffer (
-              .clk_i  (clk_i),
-              .rd_en_i(psum_buffer_en_r[i_gen*((NUM_GLB_PSUM+1)/2)+j_gen*CLUSTER_COLUMNS*((NUM_GLB_PSUM+1)/2)+g_gen] & !psum_buffer_en_w[i_gen*((NUM_GLB_PSUM+1)/2)+j_gen*CLUSTER_COLUMNS*((NUM_GLB_PSUM+1)/2)+g_gen]),
-              .wr_en_i(psum_buffer_en_w[i_gen*((NUM_GLB_PSUM+1)/2)+j_gen*CLUSTER_COLUMNS*((NUM_GLB_PSUM+1)/2)+g_gen]),
-              .addr_i (psum_buffer_addr[i_gen*BUFFER_WIDTH_PSUM*((NUM_GLB_PSUM+1)/2)+j_gen*BUFFER_WIDTH_PSUM*CLUSTER_COLUMNS*((NUM_GLB_PSUM+1)/2)+g_gen*BUFFER_WIDTH_PSUM+:BUFFER_WIDTH_PSUM]),
-              // The data buses are declared in TRANS_BITWIDTH_PSUM units
-              // (TRANS_BITWIDTH_PSUM*CLUSTERS*NUM_GLB_PSUM), so the per-column
-              // and per-row strides stay in those units. Only the slot inside
-              // one cluster is PSUM_BUFFER_WIDTH wide - using it for the
-              // strides too doubles them for NUM_GLB_PSUM>1 and runs off the
-              // end of the bus.
-              .data_i (psum_buffer_data_w[i_gen*TRANS_BITWIDTH_PSUM*NUM_GLB_PSUM+j_gen*TRANS_BITWIDTH_PSUM*CLUSTER_COLUMNS*NUM_GLB_PSUM+g_gen*PSUM_BUFFER_WIDTH+:PSUM_BUFFER_WIDTH]),
-              .wr_mask_i(1'b0),
-              .data_o (psum_buffer_data_r[i_gen*TRANS_BITWIDTH_PSUM*NUM_GLB_PSUM+j_gen*TRANS_BITWIDTH_PSUM*CLUSTER_COLUMNS*NUM_GLB_PSUM+g_gen*PSUM_BUFFER_WIDTH+:PSUM_BUFFER_WIDTH])
-          );
+          localparam integer PSUM_RAM_EN_INDEX = i_gen*((NUM_GLB_PSUM+1)/2)
+              + j_gen*CLUSTER_COLUMNS*((NUM_GLB_PSUM+1)/2) + g_gen;
+          localparam integer PSUM_RAM_ADDR_BASE = i_gen*BUFFER_WIDTH_PSUM*((NUM_GLB_PSUM+1)/2)
+              + j_gen*BUFFER_WIDTH_PSUM*CLUSTER_COLUMNS*((NUM_GLB_PSUM+1)/2)
+              + g_gen*BUFFER_WIDTH_PSUM;
+          localparam integer PSUM_RAM_DATA_BASE = i_gen*TRANS_BITWIDTH_PSUM*NUM_GLB_PSUM
+              + j_gen*TRANS_BITWIDTH_PSUM*CLUSTER_COLUMNS*NUM_GLB_PSUM
+              + g_gen*PSUM_BUFFER_WIDTH;
+          wire psum_ram_rd_en = psum_buffer_en_r[PSUM_RAM_EN_INDEX]
+              & !psum_buffer_en_w[PSUM_RAM_EN_INDEX];
+          wire psum_ram_wr_en = psum_buffer_en_w[PSUM_RAM_EN_INDEX];
+          wire [BUFFER_WIDTH_PSUM-1:0] psum_ram_addr =
+              psum_buffer_addr[PSUM_RAM_ADDR_BASE+:BUFFER_WIDTH_PSUM];
+
+          if ((g_gen*2 + 1) < NUM_GLB_PSUM) begin : gen_full_psum_pair
+            RAM_SP #(
+                .DataWidth(PSUM_BUFFER_WIDTH),
+                .AddrWidth(BUFFER_WIDTH_PSUM),
+                .Pipelined(1)
+            ) psum_buffer (
+                .clk_i  (clk_i),
+                .rd_en_i(psum_ram_rd_en),
+                .wr_en_i(psum_ram_wr_en),
+                .addr_i (psum_ram_addr),
+                // Full pairs occupy one complete PSUM_BUFFER_WIDTH word.
+                .data_i (psum_buffer_data_w[PSUM_RAM_DATA_BASE+:PSUM_BUFFER_WIDTH]),
+                .wr_mask_i(1'b0),
+                .data_o (psum_buffer_data_r[PSUM_RAM_DATA_BASE+:PSUM_BUFFER_WIDTH])
+            );
+          end else begin : gen_partial_psum_pair
+            wire [PSUM_BUFFER_WIDTH-1:0] partial_psum_data_i =
+                {{(PSUM_BUFFER_WIDTH-TRANS_BITWIDTH_PSUM){1'b0}},
+                 psum_buffer_data_w[PSUM_RAM_DATA_BASE+:TRANS_BITWIDTH_PSUM]};
+            wire [PSUM_BUFFER_WIDTH-1:0] partial_psum_data_o;
+
+            RAM_SP #(
+                .DataWidth(PSUM_BUFFER_WIDTH),
+                .AddrWidth(BUFFER_WIDTH_PSUM),
+                .Pipelined(1)
+            ) psum_buffer (
+                .clk_i  (clk_i),
+                .rd_en_i(psum_ram_rd_en),
+                .wr_en_i(psum_ram_wr_en),
+                .addr_i (psum_ram_addr),
+                // An odd PE-column count leaves only the low lane in the
+                // final RAM; pad writes and discard the unused lane on reads.
+                .data_i (partial_psum_data_i),
+                .wr_mask_i(1'b0),
+                .data_o (partial_psum_data_o)
+            );
+            assign psum_buffer_data_r[PSUM_RAM_DATA_BASE+:TRANS_BITWIDTH_PSUM] =
+                partial_psum_data_o[0+:TRANS_BITWIDTH_PSUM];
+          end
         end
       end
     end
