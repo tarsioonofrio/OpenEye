@@ -11,6 +11,7 @@ esac
 
 out_dir="${ASIC_FPGA_RESULTS_DIR:-$flow_dir/results/pe${pe_shape}_clusters-1x2_macs-1}"
 sim_dir="$out_dir/activity/rtl_sim"
+elab_db="$out_dir/netlist/OpenEye_FPGA_elaborated.db"
 : "${OPENEYE_SHM:=$sim_dir/dut.shm}"
 : "${OPENEYE_DUT_INSTANCE:=OpenEye_FPGA_activity_tb.dut}"
 export ASIC_FPGA_RESULTS_DIR="$out_dir"
@@ -31,5 +32,12 @@ if ! command -v genus >/dev/null 2>&1; then
     module use /soft64/modulefiles
     module load cadence/ddi/231
 fi
+
+mkdir -p "$out_dir/activity"
+if [[ ! -s "$elab_db" ]]; then
+    genus -batch -files "$flow_dir/run_elaboration.tcl" \
+        > "$out_dir/activity/elaboration_genus.log" 2>&1
+fi
+test -s "$elab_db"
 
 exec genus -batch -files "$flow_dir/run_power.tcl" "$@"

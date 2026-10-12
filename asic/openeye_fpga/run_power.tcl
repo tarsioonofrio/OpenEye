@@ -13,10 +13,12 @@ if {![info exists ::env(OPENEYE_DUT_INSTANCE)] || $::env(OPENEYE_DUT_INSTANCE) e
 }
 
 set DB_FILE [file join $OUT_DIR netlist OpenEye_FPGA_mapped.db]
+set ELAB_DB [file join $OUT_DIR netlist OpenEye_FPGA_elaborated.db]
 set SHM [file normalize $::env(OPENEYE_SHM)]
 set REPORT_DIR [file join $OUT_DIR reports]
 file mkdir $REPORT_DIR
 if {![file exists $DB_FILE]} { error "Missing mapped database: $DB_FILE" }
+if {![file exists $ELAB_DB]} { error "Missing elaborated RTL database: $ELAB_DB" }
 if {![file exists $SHM]} { error "SHM path does not exist: $SHM" }
 
 set LIB_PATH /pdk/tsmc/PDK28/PDK_TSMC28_bv/tcbn28hpcplusbwp30p140_190a/TSMCHOME/digital/Front_End
@@ -33,6 +35,7 @@ create_analysis_view -name view_tt -constraint_mode constraints -delay_corner de
 set_analysis_view -setup {view_tt} -hold {view_tt}
 set_db interconnect_mode ple
 
+set_rtl_stim_to_gate_config -init $ELAB_DB -keep_libraries
 read_db $DB_FILE
 read_stimulus $SHM -dut_instance $::env(OPENEYE_DUT_INSTANCE) -start 0ns
 report_power -header -unit mW -by_category > [file join $REPORT_DIR power_activity.rpt]

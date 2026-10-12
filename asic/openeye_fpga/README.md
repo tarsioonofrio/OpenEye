@@ -93,11 +93,12 @@ ASIC_FPGA_NUM_GLB_WGHT=4 asic/openeye_fpga/run_power.sh
 
 `run_activity.sh` runs the Cocotb golden-output check with Xcelium and captures
 the DUT hierarchy in `activity/rtl_sim/dut.shm` only for the selected case.
-`run_power.sh` consumes that SHM and the matching mapped Genus database, then
-writes `reports/power_activity.rpt`. The activity is RTL simulation; it is not
-gate-SDF or post-route power. RAM behavior is functional in the simulation,
-but RAM macros remain abstracted from the mapped database, so the report covers
-the mapped standard-cell logic only. Do not interpret zero memory power in this
-report as zero physical memory power. Preserve the SHM and simulator logs on
-Paxos for reproduction; they are generated binary/run artifacts and are not
-tracked in Git.
+`run_power.sh` consumes that SHM and the matching mapped Genus database. It
+also creates an elaborated RTL database and enables Genus `RTLStim2Gate` before
+reading the stimulus, then writes `reports/power_activity.rpt`. The activity is
+RTL simulation; it is not gate-SDF or post-route power. RAM behavior is
+functional in the simulation, but RAM macros remain abstracted from the mapped
+database, so the report covers the mapped standard-cell logic only. Do not
+interpret zero memory power in this report as zero physical memory power.
+Preserve the SHM and simulator logs on Paxos for reproduction; they are generated
+binary/run artifacts and are not tracked in Git.
