@@ -116,6 +116,7 @@ def test_single_conv_layer(
         force_compile=True,
         waves=(simulator != "xcelium"),
         simulator=simulator,
+        extra_args=["-sv"] if simulator == "xcelium" else [],
         extra_env={
             "CLOCK_LEN": str(clk_cycle),
             "CLOCK_UNIT": clk_cycle_unit,
