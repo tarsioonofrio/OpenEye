@@ -15,9 +15,10 @@ module OpenEye_FPGA_activity_tb (
 );
     parameter MAX_POOLING = 1;
     parameter AVERAGE_POOLING = 0;
-    OpenEye_FPGA dut (
+    OpenEye_FPGA #(
         .MAX_POOLING(MAX_POOLING),
-        .AVERAGE_POOLING(AVERAGE_POOLING),
+        .AVERAGE_POOLING(AVERAGE_POOLING)
+    ) dut (
         .clk_i(clk_i),
         .rst_ni(rst_ni),
         .ready_dma_o(ready_dma_o),
