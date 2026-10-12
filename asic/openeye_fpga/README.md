@@ -3,10 +3,9 @@
 This Genus flow synthesizes the FPGA-facing top `OpenEye_FPGA`, including its
 DMA, control, and inter-layer buffers. By default it elaborates a single
 cluster with a 2×2 PE array, two activation buffers, 20-bit partial sums, a
-64-bit DMA, and the register map in `test/cocotb_fpga/regmap.yaml`. The FPGA
-top defaults to serial PE mode, so this configuration contains four PE
-multipliers in total. This is not a synthesis of only the `OpenEye_Parallel`
-compute core.
+64-bit DMA, `SERIAL=1`, `PARALLEL_MACS=2`, and the register map in
+`test/cocotb_fpga/regmap.yaml`. This is not a synthesis of only the
+`OpenEye_Parallel` compute core.
 
 Run on Paxos from the repository root:
 
@@ -14,13 +13,31 @@ Run on Paxos from the repository root:
 asic/openeye_fpga/run_synthesis.sh
 ```
 
-The cluster count and PE-array dimensions can be selected through
+The cluster count, PE-array dimensions, and MAC lanes per PE can be selected through
 `CLUSTER_ROWS`, `CLUSTER_COLUMNS`, `NUM_GLB_PSUM` (PE columns), and
-`NUM_GLB_WGHT` (PE rows). `NUM_GLB_IACT` selects activation buffers. Results
-are kept in a configuration-specific subdirectory; set
+`NUM_GLB_WGHT` (PE rows), and `PARALLEL_MACS`. `NUM_GLB_IACT` selects
+activation buffers. Results are kept in a configuration-specific subdirectory
+named for its PE shape, cluster grid, and `PARALLEL_MACS`; set
 `ASIC_FPGA_RESULTS_DIR` to choose a different output directory. The intended
 array sweep is 6×6, 4×4, 3×3, and 2×2 PEs, with one cluster for a direct
 multiplier-count comparison.
+
+To synthesize the two functionally passing C=2/F=6 FPGA configurations with
+one MAC lane per PE and two clusters, run:
+
+```bash
+PARALLEL_MACS=1 CLUSTER_ROWS=1 CLUSTER_COLUMNS=2 \
+NUM_GLB_IACT=3 NUM_GLB_PSUM=4 NUM_GLB_WGHT=3 \
+  asic/openeye_fpga/run_synthesis.sh
+
+PARALLEL_MACS=1 CLUSTER_ROWS=1 CLUSTER_COLUMNS=2 \
+NUM_GLB_IACT=3 NUM_GLB_PSUM=4 NUM_GLB_WGHT=4 \
+  asic/openeye_fpga/run_synthesis.sh
+```
+
+These are `4 columns × 3 rows` and `4×4` PEs per cluster. The top's RTL
+default is `SERIAL=1`; the functional runs also passed that value explicitly
+to Icarus. The convolution workload itself is not part of logical synthesis.
 
 The 2-input-channel, 6-filter convolution is a workload choice. It is not
 encoded as a fixed layer in this logic synthesis; use the same 2×6 workload

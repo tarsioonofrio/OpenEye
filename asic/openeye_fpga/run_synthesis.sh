@@ -8,7 +8,8 @@ cluster_columns="${CLUSTER_COLUMNS:-1}"
 num_glb_iact="${NUM_GLB_IACT:-2}"
 num_glb_psum="${NUM_GLB_PSUM:-2}"
 num_glb_wght="${NUM_GLB_WGHT:-2}"
-out_dir="${ASIC_FPGA_RESULTS_DIR:-$flow_dir/results/pe${num_glb_wght}x${num_glb_psum}_clusters-${cluster_rows}x${cluster_columns}}"
+parallel_macs="${PARALLEL_MACS:-2}"
+out_dir="${ASIC_FPGA_RESULTS_DIR:-$flow_dir/results/pe${num_glb_psum}x${num_glb_wght}_clusters-${cluster_rows}x${cluster_columns}_macs-${parallel_macs}}"
 mkdir -p "$out_dir/generated" "$out_dir/reports" "$out_dir/netlist"
 out_dir="$(cd -- "$out_dir" && pwd)"
 export ASIC_FPGA_RESULTS_DIR="$out_dir"
@@ -23,11 +24,11 @@ export NUM_GLB_PSUM="$num_glb_psum" NUM_GLB_WGHT="$num_glb_wght"
 export IACT_RAM_CELLS=4 BUFFER_WIDTH=10 BUFFER_WIDTH_WGHT=12
 export BUFFER_WIDTH_PSUM=14 BRANCHES=2 QUANT_AMOUNT=32
 export DATA_PSUM_BITWIDTH=20 TRANS_WORDS=8 DMA_BITWIDTH=64
-export PARALLEL_MACS=2 SPARSITY_EN=1
+export PARALLEL_MACS="$parallel_macs" SPARSITY_EN=1
 export TRANS_BITWIDTH_IACT=24 TRANS_BITWIDTH_WGHT=24
 export STRIDE_ENABLED=0
 
-python -m open_eye.vh_file_creator
+(cd "$out_dir" && python -m open_eye.vh_file_creator)
 python "$repo_root/src/open_eye/generator.py" \
     "$repo_root/test/cocotb_fpga" "$out_dir/generated" \
     "$out_dir/generated" "$out_dir/generated"
