@@ -12,10 +12,10 @@ set ELAB_DB [file join $OUT_DIR netlist OpenEye_FPGA_elaborated.db]
 set LIB_PATH /pdk/tsmc/PDK28/PDK_TSMC28_bv/tcbn28hpcplusbwp30p140_190a/TSMCHOME/digital/Front_End
 set TECH_PATH /pdk/tsmc/PDK28/PDK_TSMC28_bv/tcbn28hpcplusbwp30p140_190a/TSMCHOME/digital/Back_End
 set LIB_FILE "${LIB_PATH}/timing_power_noise/NLDM/tcbn28hpcplusbwp30p140_180a/tcbn28hpcplusbwp30p140tt0p9v25c.lib"
-read_physical -lefs "${TECH_PATH}/lef/tsmcn28_9lm5X1Y1Z1UUTRDL.tlef ${TECH_PATH}/lef/tcbn28hpcplusbwp30p140_110a/lef/tcbn28hpcplusbwp30p140.lef"
 create_library_set -name libset_tt -timing $LIB_FILE
 create_opcond -name opcond_tt -voltage 0.90 -temperature 25.0
 create_timing_condition -name timing_tt -opcond opcond_tt -library_sets {libset_tt}
+read_physical -lefs "${TECH_PATH}/lef/tsmcn28_9lm5X1Y1Z1UUTRDL.tlef ${TECH_PATH}/lef/tcbn28hpcplusbwp30p140_110a/lef/tcbn28hpcplusbwp30p140.lef"
 create_rc_corner -name rc_typ -temperature 25.0 \
     -qrc_tech "${TECH_PATH}/qrc/RC_QRC_crn28hpc+_1p09m+ut-alrdl_5x1y1z1u_typical/qrcTechFile"
 create_delay_corner -name delay_tt -timing_condition timing_tt -rc_corner rc_typ
