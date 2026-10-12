@@ -19,8 +19,6 @@ import open_eye.layer_parameters as lp
 import open_eye.simple_layer_operations as slo
 import open_eye.layer_execution_state as les
 import open_eye.data_create as data_create
-import open_eye.tflite2model as tflite2model
-import open_eye.onnx2model as o2m
 from cocotb.logging import SimLogFormatter
 import logging
 import sys
@@ -202,6 +200,7 @@ async def single_layer_test(dut):
         target_dir = current_dir.parent.parent / "models"
         sys.path.append(str(target_dir))
         from mnist_conv_net import SimpleMNISTConvNet, load_simple_mnist_model
+        import open_eye.onnx2model as o2m
         model = SimpleMNISTConvNet()
         model = o2m.get_model(model)
         trunc_model = truncate_model(model)
