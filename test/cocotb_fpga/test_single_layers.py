@@ -22,7 +22,7 @@ from open_eye import hdl_dir, test_dir, open_eye_dir
 
 ##########################################################################################
 # TODO: put everything below in a common function
-clk_cycle = 20
+clk_cycle = int(os.environ.get("OPENEYE_CLOCK_PERIOD_NS", "20"))
 clk_cycle_unit = "ns"
 
 clk_delay_in = 100
@@ -63,14 +63,19 @@ def test_single_conv_layer(
     # net and ignores the size parameters above; "Convolution" builds the
     # single conv layer those parameters describe. Override via LAYER.
     layer = os.environ.get("LAYER", "MNIST")
-    dut = 'OpenEye_FPGA'
+    capture_shm = os.environ.get("ASIC_CAPTURE_SHM") == "1"
+    simulator = os.environ.get("OPENEYE_SIMULATOR", "icarus").lower()
+    dut = 'OpenEye_FPGA_activity_tb' if capture_shm else 'OpenEye_FPGA'
     module = 'OpenEye_FPGA_tb'
     toplevel = dut
     verilog_sources = ptu.get_verilog_sources(hdl_dir)
 
     # NodeID aus pytest, als eindeutiger Ordnername
     nodeid = request.node.nodeid.replace("::", "_").replace("/", "_").replace("[","_").replace("]","_")
-    target_dir = os.path.join(test_dir, '.temp/' + nodeid)
+    target_dir = os.environ.get(
+        "OPENEYE_SIM_BUILD_DIR",
+        os.path.join(test_dir, '.temp/' + nodeid),
+    )
     os.makedirs(target_dir, exist_ok=True)
 
     regmap_dir = os.path.join(test_dir, 'cocotb_fpga')
@@ -88,21 +93,29 @@ def test_single_conv_layer(
         if os.path.basename(src) != "dma_storage.v"
     ]
     verilog_sources.append(os.path.join(target_dir, "dma_storage.v"))
+    if capture_shm:
+        verilog_sources.append(os.path.join(
+            os.path.dirname(__file__), "OpenEye_FPGA_activity_tb.sv"))
+
+    defines = {"NO_TRACE": "TRUE"}
+    if capture_shm:
+        defines["ASIC_CAPTURE_SHM"] = "TRUE"
 
     results = cocotb_test.simulator.run(
         python_search=[test_dir],
         verilog_sources=verilog_sources,
+        includes=[target_dir],
         toplevel=toplevel,
         module=module,
         sim_build=target_dir,
         testcase='start_test_fpga',
-        defines={"NO_TRACE": "TRUE"},
+        defines=defines,
         # The RTL builds either max or average pooling (default: average). The
         # MNIST net pools with MaxPooling2D, so select the max-pool hardware.
         parameters={"MAX_POOLING": 1, "AVERAGE_POOLING": 0},
         force_compile=True,
-        waves=True,
-        simulator="icarus",
+        waves=(simulator != "xcelium"),
+        simulator=simulator,
         extra_env={
             "CLOCK_LEN": str(clk_cycle),
             "CLOCK_UNIT": clk_cycle_unit,
@@ -126,6 +139,9 @@ def test_single_conv_layer(
             "NUM_GLB_WGHT": str(NUM_GLB_WGHT),
             "NUM_GLB_PSUM": str(NUM_GLB_PSUM),
             "LOGGER_LEVEL": str(LOGGER_LEVEL),
+            "CLUSTER_COLUMNS": os.environ.get("CLUSTER_COLUMNS", "2"),
+            "PARALLEL_MACS": os.environ.get("PARALLEL_MACS", "2"),
+            "SERIAL": os.environ.get("SERIAL", "1"),
             "COCOTB_LOG_FILE_PATH": os.path.join(target_dir, "cocotb_sim.log"), # <--- Neu
             "COCOTB_TRACE": "1",
             #,"IVERILOG_DUMPER" : "fst"
@@ -160,6 +176,40 @@ def test_official_conv_c2_f6_fpga(monkeypatch, request):
         NUM_GLB_IACT=3,
         NUM_GLB_PSUM=4,
         NUM_GLB_WGHT=3,
+        LOGGER_LEVEL=0,
+        request=request,
+    )
+
+
+def test_power_activity_official_conv_c2_f6_fpga(monkeypatch, request):
+    """Validated C=2/F=6 workload at the ASIC clock, with a scoped SHM."""
+    num_glb_wght = int(os.environ.get("ASIC_FPGA_NUM_GLB_WGHT", "3"))
+    if num_glb_wght not in (3, 4):
+        pytest.fail("ASIC_FPGA_NUM_GLB_WGHT must be 3 or 4")
+
+    monkeypatch.setenv("LAYER", "Convolution_Single")
+    monkeypatch.setenv("OPENEYE_LAYER_SEED", "123")
+    monkeypatch.setenv("OPENEYE_EXPECT_LAYERS", "1")
+    monkeypatch.setenv("CLUSTER_COLUMNS", "2")
+    monkeypatch.setenv("PARALLEL_MACS", "1")
+    monkeypatch.setenv("SERIAL", "1")
+    monkeypatch.setenv("ASIC_CAPTURE_SHM", "1")
+
+    test_single_conv_layer(
+        NUM_FILTERS=6,
+        STRIDE=1,
+        KERNEL_SIZE_X=3,
+        KERNEL_SIZE_Y=3,
+        INPUT_SIZE_X=32,
+        INPUT_SIZE_Y=32,
+        INPUT_CHANNELS=2,
+        USE_SPARSE_IACTS=0,
+        USE_SPARSE_WGHTS=0,
+        USE_RANDOM_VALUES=1,
+        CLUSTER_ROWS=1,
+        NUM_GLB_IACT=3,
+        NUM_GLB_PSUM=4,
+        NUM_GLB_WGHT=num_glb_wght,
         LOGGER_LEVEL=0,
         request=request,
     )

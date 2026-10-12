@@ -47,13 +47,13 @@ class CustomSimTimeFormatter(logging.Formatter):
         msg = super().format(record)
         return f"{sim_time_str} {msg}"
 
-os.environ["CLOCK_LEN"] = "10"
-os.environ["CLOCK_UNIT"] = "ns"
-os.environ["CLOCK_DELAY_INPUT"] = "100"
-os.environ["CLOCK_DELAY_UNIT_INPUT"] = "ps"
+os.environ.setdefault("CLOCK_LEN", "10")
+os.environ.setdefault("CLOCK_UNIT", "ns")
+os.environ.setdefault("CLOCK_DELAY_INPUT", "100")
+os.environ.setdefault("CLOCK_DELAY_UNIT_INPUT", "ps")
 
-os.environ["CLOCK_DELAY_OUTPUT"] = "100"
-os.environ["CLOCK_DELAY_UNIT_OUTPUT"] = "ps"
+os.environ.setdefault("CLOCK_DELAY_OUTPUT", "100")
+os.environ.setdefault("CLOCK_DELAY_UNIT_OUTPUT", "ps")
 
 time_printer = time_stamper.time_stamper()
 

@@ -72,3 +72,32 @@ The constraints use TSMC28 TT 0.90 V / 25 °C and a 2 ns clock, matching the
 repository's FastConv example setup. `power_vectorless.rpt` is a synthesis
 estimate without workload activity, not workload power. This flow does not
 perform placement or routing.
+
+## Workload activity power
+
+The activity run uses the same C=2/F=6, 32×32, 3×3, seed-123 dense convolution
+as the official functional test, with `SERIAL=1`, one MAC per PE, and the
+selected two-cluster 4×3 or 4×4 configuration. The test clock is set to 2 ns
+(500 MHz), matching `constraints.sdc`; the regular Cocotb testbench defaults
+to 10 ns unless its runner supplies another value.
+
+Run each configuration from the repository root on Paxos:
+
+```bash
+ASIC_FPGA_NUM_GLB_WGHT=3 asic/openeye_fpga/run_activity.sh
+ASIC_FPGA_NUM_GLB_WGHT=3 asic/openeye_fpga/run_power.sh
+
+ASIC_FPGA_NUM_GLB_WGHT=4 asic/openeye_fpga/run_activity.sh
+ASIC_FPGA_NUM_GLB_WGHT=4 asic/openeye_fpga/run_power.sh
+```
+
+`run_activity.sh` runs the Cocotb golden-output check with Xcelium and captures
+the DUT hierarchy in `activity/rtl_sim/dut.shm` only for the selected case.
+`run_power.sh` consumes that SHM and the matching mapped Genus database, then
+writes `reports/power_activity.rpt`. The activity is RTL simulation; it is not
+gate-SDF or post-route power. RAM behavior is functional in the simulation,
+but RAM macros remain abstracted from the mapped database, so the report covers
+the mapped standard-cell logic only. Do not interpret zero memory power in this
+report as zero physical memory power. Preserve the SHM and simulator logs on
+Paxos for reproduction; they are generated binary/run artifacts and are not
+tracked in Git.
