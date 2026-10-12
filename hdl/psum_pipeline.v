@@ -260,7 +260,7 @@ module psum_pipeline #(
   assign psum_cycle_addr_3_next = psum_cycle_addr_3 + psum_cycle_addr_inc_3;
   assign psum_cycle_addr_4_next = psum_cycle_addr_4 + psum_cycle_addr_inc_4;
 
-  integer g_psum, b_psum, cc_psum, cr_psum, trans_idx;
+  integer g_psum, g_lane_psum, b_psum, cc_psum, cr_psum, trans_idx;
   genvar i_addr, j_addr, g_addr, quant_flat_gen, trans_gen;
   generate
     for (quant_flat_gen = 0; quant_flat_gen < QUANT_AMOUNT; quant_flat_gen=quant_flat_gen+1) begin : gen_flat_quant_wires
@@ -492,8 +492,9 @@ module psum_pipeline #(
                   // must be g_psum*ROUTER_MODES_PSUM*2, matching every other
                   // use of this bit-2 check in this state (lines above/below).
                   if ((fsm_psum_cycle != 0) & ((router_mode_psum[(cc_psum * NUM_GLB_PSUM * ROUTER_MODES_PSUM) + (cr_psum * CLUSTER_COLUMNS * NUM_GLB_PSUM * ROUTER_MODES_PSUM) + (g_psum * ROUTER_MODES_PSUM * 2) + 2] == 1) | (CLUSTER_ROWS == 1))) begin
-                    psum_enable_i_reg[cc_psum*NUM_GLB_PSUM+cr_psum*CLUSTER_COLUMNS*NUM_GLB_PSUM+g_psum * 2] <= 1;
-                    psum_enable_i_reg[cc_psum*NUM_GLB_PSUM+cr_psum*CLUSTER_COLUMNS*NUM_GLB_PSUM+g_psum * 2 + 1] <= 1;
+                    for (g_lane_psum = 2*g_psum; g_lane_psum < NUM_GLB_PSUM && g_lane_psum < 2*g_psum+2; g_lane_psum = g_lane_psum + 1) begin
+                      psum_enable_i_reg[cc_psum*NUM_GLB_PSUM+cr_psum*CLUSTER_COLUMNS*NUM_GLB_PSUM+g_lane_psum] <= 1;
+                    end
                   end
                 end
               end
