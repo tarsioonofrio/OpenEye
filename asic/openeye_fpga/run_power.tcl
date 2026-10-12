@@ -27,13 +27,13 @@ set LIB_FILE "${LIB_PATH}/timing_power_noise/NLDM/tcbn28hpcplusbwp30p140_180a/tc
 create_library_set -name libset_tt -timing $LIB_FILE
 create_opcond -name opcond_tt -voltage 0.90 -temperature 25.0
 create_timing_condition -name timing_tt -opcond opcond_tt -library_sets {libset_tt}
-read_physical -lefs "${TECH_PATH}/lef/tsmcn28_9lm5X1Y1Z1UUTRDL.tlef ${TECH_PATH}/lef/tcbn28hpcplusbwp30p140_110a/lef/tcbn28hpcplusbwp30p140.lef"
 create_rc_corner -name rc_typ -temperature 25.0 \
     -qrc_tech "${TECH_PATH}/qrc/RC_QRC_crn28hpc+_1p09m+ut-alrdl_5x1y1z1u_typical/qrcTechFile"
 create_delay_corner -name delay_tt -timing_condition timing_tt -rc_corner rc_typ
 create_constraint_mode -name constraints -sdc_files [file join $FLOW_DIR constraints.sdc]
 create_analysis_view -name view_tt -constraint_mode constraints -delay_corner delay_tt
 set_analysis_view -setup {view_tt} -hold {view_tt}
+read_physical -lefs "${TECH_PATH}/lef/tsmcn28_9lm5X1Y1Z1UUTRDL.tlef ${TECH_PATH}/lef/tcbn28hpcplusbwp30p140_110a/lef/tcbn28hpcplusbwp30p140.lef"
 set_db interconnect_mode ple
 
 set_rtl_stim_to_gate_config -init $ELAB_DB -keep_libraries
