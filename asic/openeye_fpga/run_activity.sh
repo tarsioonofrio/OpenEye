@@ -32,6 +32,7 @@ export PARALLEL_MACS=1 SERIAL=1 SPARSITY_EN=1
 export OPENEYE_LAYER_SEED=123
 
 cd "$repo_root"
+export PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}"
 .venv/bin/python -m pytest -x -q -s \
     test/cocotb_fpga/test_single_layers.py::test_power_activity_official_conv_c2_f6_fpga
 
