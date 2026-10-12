@@ -67,12 +67,14 @@ NUM_GLB_IACT=3 NUM_GLB_PSUM=4 NUM_GLB_WGHT=4 \
   asic/openeye_fpga/run_synthesis.sh
 ```
 
-Os resultados completos, incluindo netlists e logs, foram mantidos apenas na
-Paxos e não são versionados:
+Os netlists mapeados em Verilog, o cabeçalho de parâmetros do topo e os quatro
+relatórios completos do Genus estão versionados nos diretórios abaixo. O banco
+Genus `.db` é binário e permanece na Paxos, fora do Git:
 
 - `/sim/tarsio/OpenEye/asic/openeye_fpga/results/pe4x3_clusters-1x2_macs-1/`
 - `/sim/tarsio/OpenEye/asic/openeye_fpga/results/pe4x4_clusters-1x2_macs-1/`
 
-Cada diretório contém `generated/parameters_FPGA.vh`,
-`netlist/OpenEye_FPGA_mapped.{v,db}`, `reports/{area,gates,timing}.rpt`,
-`reports/power_vectorless.rpt` e `genus.log`.
+Cada diretório versionado contém `generated/parameters_FPGA.vh`,
+`netlist/OpenEye_FPGA_mapped.v` e
+`reports/{area,gates,timing,power_vectorless}.rpt`. O arquivo binário
+`OpenEye_FPGA_mapped.db` continua disponível somente na Paxos.

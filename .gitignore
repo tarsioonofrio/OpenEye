@@ -308,3 +308,21 @@ literature/*
 *.vscode
 CLAUDE.md
 notes.md
+
+# Keep text synthesis artifacts for the two official FPGA runs; omit binaries.
+asic/openeye_fpga/results/**
+!asic/openeye_fpga/results/
+!asic/openeye_fpga/results/pe4x3_clusters-1x2_macs-1/
+!asic/openeye_fpga/results/pe4x3_clusters-1x2_macs-1/generated/
+!asic/openeye_fpga/results/pe4x3_clusters-1x2_macs-1/generated/parameters_FPGA.vh
+!asic/openeye_fpga/results/pe4x3_clusters-1x2_macs-1/netlist/
+!asic/openeye_fpga/results/pe4x3_clusters-1x2_macs-1/netlist/OpenEye_FPGA_mapped.v
+!asic/openeye_fpga/results/pe4x3_clusters-1x2_macs-1/reports/
+!asic/openeye_fpga/results/pe4x3_clusters-1x2_macs-1/reports/*.rpt
+!asic/openeye_fpga/results/pe4x4_clusters-1x2_macs-1/
+!asic/openeye_fpga/results/pe4x4_clusters-1x2_macs-1/generated/
+!asic/openeye_fpga/results/pe4x4_clusters-1x2_macs-1/generated/parameters_FPGA.vh
+!asic/openeye_fpga/results/pe4x4_clusters-1x2_macs-1/netlist/
+!asic/openeye_fpga/results/pe4x4_clusters-1x2_macs-1/netlist/OpenEye_FPGA_mapped.v
+!asic/openeye_fpga/results/pe4x4_clusters-1x2_macs-1/reports/
+!asic/openeye_fpga/results/pe4x4_clusters-1x2_macs-1/reports/*.rpt

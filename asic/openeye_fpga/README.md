@@ -49,12 +49,13 @@ database/netlist and area, gate, timing, and vectorless-power reports alongside
 them.
 
 The completed synthesis results for these two configurations are summarized in
-[`RESULTS_C2F6_MACS1.md`](RESULTS_C2F6_MACS1.md). The mapped netlists and full
-Genus reports remain in their configuration-specific `results/` directories on
-Paxos; they are generated artifacts and are not tracked by Git. To conserve
-space, the Paxos results directory retains only these two official runs; older
-FPGA synthesis outputs from previous sweeps were removed after these results
-were collected.
+[`RESULTS_C2F6_MACS1.md`](RESULTS_C2F6_MACS1.md). The mapped Verilog netlists,
+the `parameters_FPGA.vh` used for each run, and all four full Genus reports are
+tracked under their configuration-specific `results/` directories. The binary
+Genus `.db` databases remain on Paxos and are not tracked. To conserve space,
+the Paxos results directory retains only these two official runs; older FPGA
+synthesis outputs from previous sweeps were removed after these results were
+collected.
 
 The script loads the OpenEye pilot's Genus 23.14 module. Latch inference is
 reported rather than treated as fatal because the current FPGA activation
