@@ -196,25 +196,28 @@ def create_regmap_params_vh_file(regmap_yaml_path, output_vh_path=None, output_v
 
     with open("shared_config.json", "w") as f:
         json.dump(config_data, f)
-    # 1) Write Verilog parameter file (regmap_params.vh)
+    # 1) Write a module-parameter list for dma_storage. Keeping these as
+    #    compilation-unit parameters is accepted by Icarus but rejected by
+    #    stricter SystemVerilog frontends such as Xcelium.
     with open(VERILOG_PARAMS_OUT, "w+") as vf:
-        vf.write("`ifndef REGMAP_PARAMS_VH\n`define REGMAP_PARAMS_VH\n\n")
-        vf.write("// Auto-generated from {}\n\n".format(YAML_FILE))
-        vf.write(f"parameter DMA_BITWIDTH = {dma_bitwidth};\n")
-        vf.write(f"parameter TRANSMISSIONS = {num_transmissions};\n\n")
+        param_declarations = [
+            f"parameter DMA_BITWIDTH = {dma_bitwidth}",
+            f"parameter TRANSMISSIONS = {num_transmissions}",
+        ]
 
         for tid, regs in enumerate(transmissions):
-            vf.write(f"// Transmission {tid} Offsets\n")
             for i, reg in enumerate(regs):
                 pname = f"PARAMETER_POS_{tid}_{i}"
                 if i == 0:
-                    vf.write(f"parameter {pname} = 0;\n")
+                    param_declarations.append(f"parameter {pname} = 0")
                 else:
                     prev_name = f"PARAMETER_POS_{tid}_{i-1}"
                     prev_width = regs[i-1]['width']
-                    vf.write(f"parameter {pname} = {prev_name} + {prev_width};\n")
-            vf.write("\n")
-        vf.write("`endif // REGMAP_PARAMS_VH\n")
+                    param_declarations.append(
+                        f"parameter {pname} = {prev_name} + {prev_width}")
+        vf.write("// Auto-generated parameter list from {}\n".format(YAML_FILE))
+        vf.write(",\n".join(param_declarations))
+        vf.write("\n")
 
     print(f"[OK] Verilog parameters written to {VERILOG_PARAMS_OUT}.")
 
@@ -253,11 +256,12 @@ def create_regmap_params_vh_file(regmap_yaml_path, output_vh_path=None, output_v
         dv.write("// DMA Storage Module - Pipelined Shift Register Architecture\n//\n")
         dv.write("// Optimized for minimum LUT footprint. Eliminates the address decoder completely.\n")
         dv.write("// Data is shifted sequentially into a configuration pipe register chain.\n\n")
-        dv.write("\n`timescale 1ns / 1ps\n")
-        dv.write("`include \"regmap_params.vh\"\n\n")
+        dv.write("\n`timescale 1ns / 1ps\n\n")
 
         # Module header
-        dv.write("module dma_storage (\n")
+        dv.write("module dma_storage #(\n")
+        dv.write("`include \"regmap_params.vh\"\n")
+        dv.write(") (\n")
         dv.write("    input  wire                  clk_i,\n")
         dv.write("    input  wire                  rst_ni,           // Active-low reset\n")
         dv.write("    input  wire                  write_en,         // Write enable from DMA\n")
