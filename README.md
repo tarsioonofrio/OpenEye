@@ -1,246 +1,147 @@
-# OpenEye
+# OpenEye in TSMC 28 nm: an Eyeriss-v2-style baseline for FastConv
 
-| ![OpenEyeLogo](doc/figures/open_eye_logo.png) | **Open-Source Hardware Accelerator for Efficient Neural Network Inference** |
-| - | - |
+This fork of [OpenEye](https://github.com/Learning-Chips-Lab/OpenEye) (FH Dortmund, University of
+Duisburg-Essen) adds a TSMC 28 nm ASIC synthesis and activity-power flow, so that the accelerator can be
+compared with the FastConv fast-convolution cores
+([FastConv_SystemVerilog](https://github.com/tarsioonofrio/FastConv_SystemVerilog)) under the same library,
+corner and clock (TT, 0.90 V, 25 °C, 500 MHz). OpenEye is an open, parameterizable take on Eyeriss v2: a sparse,
+row-stationary INT8 array with 20-bit partial sums.
 
-OpenEye is an open-source DNN inference accelerator originally developed at [FH Dortmund – University of Applied Sciences and Arts](https://www.fh-dortmund.de) and continued since March 2025 at the [University of Duisburg-Essen, Electronic Components and Circuits](https://www.uni-due.de/ebs/) group.
-It takes the ideas of [EyerissV2](https://arxiv.org/pdf/1807.07928) and makes them fully open, parameterizable, and FPGA-deployable — implementing a sparse, scalable systolic array for INT8 convolutions, depthwise convolutions, and fully-connected layers.
+**These results are not part of a paper.** The ISCAS 2027 FastConv paper uses SAURIA and WinoCNN as baselines;
+OpenEye is an additional reference point whose numbers are still estimates (see [Limitations](#limitations)).
+The two configurations that pass the official convolution test (2 input channels, 6 filters, 32×32, 3×3)
+synthesize to 79 123 and 95 877 µm² of standard cells for 24 and 32 MACs, and draw 33.7 and 39.7 mW with the
+workload's RTL activity.
 
-Where EyerissV2 is a fixed research chip, **OpenEye is designed to be resized at elaboration time**: cluster count, PEs per cluster, scratchpad depths, data widths, and router modes are all top-level parameters. This means you can target anything from a small edge FPGA to a large ASIC without touching a single line of RTL logic.
+The README of the original project (architecture, toolchain, tests) is kept as
+[`README.upstream.md`](README.upstream.md).
 
----
+## Layout
 
-## What OpenEye can do
-
-- **INT8 inference** of convolutional neural networks (CNNs), depthwise-separable convolutions, and fully-connected layers
-- **Sparsity exploitation** at every level of the hierarchy: zero weights and zero activations are skipped, reducing power and latency
-- **Row-Stationary Dataflow** for maximum data reuse and minimal off-chip bandwidth
-- **On-chip 2×2 max-pooling** applied directly after the convolution
-- **Fully parameterizable array** — cluster count, PEs per cluster, scratchpad depths, data widths, and router modes are all top-level Verilog parameters; no RTL changes needed to resize the accelerator
-- **FPGA and ASIC targets** — `OpenEye_FPGA.v` wraps the ASIC compute core `OpenEye_Parallel.v` with DMA burst interfaces and block-RAM buffers for real FPGA deployment
-- **Full end-to-end toolchain** — from a TFLite/Keras model through quantization, layer compilation, DMA stream generation, RTL simulation, and result verification, all from Python/CocoTB
-
----
-
-## Key features at a glance
-
-| Feature | Detail |
+| Folder | Content |
 |---|---|
-| Data types | INT8 activations & weights, 20-bit psum accumulator |
-| Default array size | 2 × 8 clusters, 12 PEs/cluster → 192 PEs |
-| **Array scalability** | `CLUSTER_COLUMNS`, `CLUSTER_ROWS`, `NUM_GLB_PSUM`, `NUM_GLB_WGHT` are all top-level parameters — change them without touching RTL logic |
-| Dataflow | Row-Stationary |
-| Sparsity | Structural sparsity on both iact and wght |
-| On-chip pooling | 2×2 max-pooling |
-| Host interface | 64-bit DMA AXI-stream-style handshake |
-| Quantization | Per-filter affine: `q = (mant × (psum + offset)) >>> exp` |
-| HDL | Verilog (SystemVerilog-compatible subset) |
-| License | Solderpad Hardware License v2.1 (SHL-2.1) |
+| `asic/openeye_fpga/` | the flow used for the results: synthesis of the `OpenEye_FPGA` top (DMA, control, buffers and clusters), activity capture, power; `results/<configuration>/` holds the netlists, parameters and reports; `RESULTS_C2F6_MACS1.md` the summary |
+| `asic/openeye_parallel/` | a first synthesis/power pilot of the `OpenEye_Parallel` compute core alone (one cluster, one serial MAC by default) |
+| `hdl/` | OpenEye RTL (upstream, with the fork's fixes) |
+| `src/open_eye/` | Python toolchain: layer mapping, DMA stream generation, reference operations |
+| `test/` | cocotb and Verilog testbenches (`test/README_TB.md`) |
+| `doc/` | upstream documentation plus `asic_openeye_fpga_array_sweep.md` (square-array sweep) and `test_status_handover.md` (test status) |
+| `fpga/`, `yosys/`, `nextpnr/`, `dse_scripts/`, `models/`, `tflite/` | upstream FPGA, open-source synthesis, design-space and model material |
 
-### Scalability vs. EyerissV2
+## Configurations
 
-EyerissV2 introduced the concept of a hierarchical, reconfigurable PE array — but as a fabricated ASIC its dimensions are fixed.
-OpenEye exposes the same architectural knobs as compile-time Verilog parameters:
+Both use the `OpenEye_FPGA` top with 1 × 2 clusters, `SERIAL=1`, `PARALLEL_MACS=1` (one multiplier per PE),
+`NUM_GLB_IACT=3`, `NUM_GLB_PSUM=4` (PE columns), `SPARSITY_EN=1`.
 
-| Parameter | What it controls | Example values |
+| Configuration | PEs per cluster (columns × rows) | `NUM_GLB_WGHT` | PEs/MACs | Results (`asic/openeye_fpga/results/`) |
+|---|---|---|---|---|
+| 4×3 | 12 | 3 | 24 | `pe4x3_clusters-1x2_macs-1/` |
+| 4×4 | 16 | 4 | 32 | `pe4x4_clusters-1x2_macs-1/` |
+
+Workload: dense convolution with 2 input channels and 6 filters, 32×32 input, 3×3 kernel, seed 123
+(`test/cocotb_fpga/test_single_layers.py::test_power_activity_official_conv_c2_f6_fpga`). It differs from the
+FastConv/SAURIA layer (3 input and 12 output channels).
+
+## Quick start
+
+The committed reports can be read without any tool: `asic/openeye_fpga/RESULTS_C2F6_MACS1.md` (in Portuguese)
+summarizes them, and each `results/<configuration>/reports/` holds the full Genus area, gate, timing,
+vectorless-power and activity-power reports.
+
+The functional check of a configuration (cocotb with the Python environment of `README.upstream.md`; Xcelium as
+in the flow, or `OPENEYE_SIMULATOR=icarus`; not rerun while this README was written):
+
+```bash
+CLUSTER_ROWS=1 CLUSTER_COLUMNS=2 NUM_GLB_IACT=3 NUM_GLB_PSUM=4 NUM_GLB_WGHT=3 \
+PARALLEL_MACS=1 SERIAL=1 SPARSITY_EN=1 OPENEYE_CLOCK_PERIOD_NS=2 PYTHONPATH=src \
+  .venv/bin/python -m pytest -x -q -s \
+  test/cocotb_fpga/test_single_layers.py::test_power_activity_official_conv_c2_f6_fpga
+# TESTS=1 PASS=1 FAIL=0
+```
+
+The whole flow of one configuration, with the Cadence tools and the library (from the repository root, on the
+EDA host):
+
+```bash
+PARALLEL_MACS=1 CLUSTER_ROWS=1 CLUSTER_COLUMNS=2 NUM_GLB_IACT=3 NUM_GLB_PSUM=4 NUM_GLB_WGHT=3 \
+  asic/openeye_fpga/run_synthesis.sh                   # about 30 min
+ASIC_FPGA_NUM_GLB_WGHT=3 asic/openeye_fpga/run_activity.sh   # Xcelium + cocotb, golden check, dut.shm
+ASIC_FPGA_NUM_GLB_WGHT=3 asic/openeye_fpga/run_power.sh      # Genus power with the RTL activity
+```
+
+Use `NUM_GLB_WGHT=4` / `ASIC_FPGA_NUM_GLB_WGHT=4` for the 4×4 configuration.
+
+## Requirements
+
+| Item | Version used | Notes |
 |---|---|---|
-| `CLUSTER_COLUMNS` | Width of the cluster grid | 1, 2, 4 … |
-| `CLUSTER_ROWS` | Height of the cluster grid | 2, 4, 8 … |
-| `NUM_GLB_WGHT` | PE rows per cluster (= weight GLBs) | 3, 4, 6 … |
-| `NUM_GLB_PSUM` | PE columns per cluster (= psum GLBs) | 4, 8 … |
-| `IACT_PER_PE` / `WGHT_PER_PE` / `PSUM_PER_PE` | Scratchpad depths | tune to fit target BRAM |
-| `SERIAL` / `PARALLEL_MACS` | Serial vs. parallel MAC inside each PE | 1 / 2, 4 … |
-| `SPARSITY_EN` | Enable or disable sparse encoding | 0 or 1 |
+| Python, cocotb, pytest | see `README.upstream.md` | functional tests and activity capture |
+| Cadence Genus | 23.14 (`cadence/ddi/231`) | synthesis and power |
+| Cadence Xcelium | 23.03 | activity capture (`run_activity.sh`) |
+| Icarus Verilog | | upstream tests (`test/README_TB.md`) |
+| TSMC 28 nm HPC+ standard cells `tcbn28hpcplusbwp30p140` | | under NDA, not included |
 
-Because all routing, buffering, address generation, and DMA logic is derived from these parameters via `generate` blocks and `localparam` arithmetic, you get a correctly wired accelerator of any size after a single re-elaboration — no manual wiring, no RTL edits.
+## Where each number comes from
 
----
+| Value | 4×3 | 4×4 | File |
+|---|---|---|---|
+| Standard cells | 66 505 | 81 515 | `results/<config>/reports/gates.rpt` |
+| Standard-cell area (µm²) | 79 122.960 | 95 876.802 | `results/<config>/reports/area.rpt` |
+| Setup slack at 2 ns | +394 ps | +394 ps | `results/<config>/reports/timing.rpt` |
+| Vectorless power (mW), not workload power | 49.1846 | 58.9395 | `results/<config>/reports/power_vectorless.rpt` |
+| Simulated window (cycles at 2 ns) | 18 962 | 19 346 | `RESULTS_C2F6_MACS1.md` |
+| Activity power (mW), whole simulation window | 33.7181 | 39.6638 | `results/<config>/reports/power_activity.rpt` |
 
-## Repository layout
+Paths are relative to `asic/openeye_fpga/`. The square-array sweep (2×2 to 6×6 PEs, one cluster, vectorless
+power only) is in `doc/asic_openeye_fpga_array_sweep.md`.
 
-```
-OpenEye/
-├── hdl/                        RTL source files
-│   ├── OpenEye_FPGA.v          Top-level FPGA wrapper (~3050 lines)
-│   ├── OpenEye_Parallel.v      ASIC compute core
-│   ├── OpenEye_Cluster.v       Top-level cluster
-│   ├── PE_cluster.v            One cluster of PEs
-│   ├── PE.v                    Processing element (MAC unit)
-│   ├── iact_stream_constructor.v  Converts raw pixels → sparse iact streams
-│   ├── dma_storage.v           Auto-generated register-map decoder
-│   ├── varlenFIFO.v            Variable-length FIFO
-│   ├── RST_SYNC.v              2-FF reset synchronizer
-│   ├── RAM_SP.v / RAM_DP.v     SRAM primitives
-│   ├── router_iact/wght/psum.v  Flexible routing network
-│   └── include/
-│       └── regmap_params.vh    Parameter header for dma_storage
-├── src/                        Python host-side toolchain
-│   └── open_eye/               Package: model loader, layer adapter,
-│                               DMA stream generator, config compiler
-├── test/                       Testbenches (see below)
-│   ├── cocotb_PE/              Unit test for a single PE
-│   ├── cocotb_PE_cluster/      Unit test for a PE cluster
-│   ├── cocotb_parallel/        Integration tests for OpenEye_Parallel
-│   ├── cocotb_fpga/            System tests for OpenEye_FPGA
-│   └── simulation/             Pre-computed reference datasets
-│       └── mnist_quantized_model/
-├── doc/
-│   ├── OpenEye_FPGA_documentation.md  Detailed module documentation
-│   ├── demo_notebooks/
-│   │   └── simple_cnn_demo.ipynb   Quickstart tutorial (start here!)
-│   └── figures/
-└── requirements.txt
-```
+## Changes to OpenEye
 
----
+Since the fork point (`c4bd562`; the first commit of the fork is from 2026-10-03): the two ASIC flows under `asic/`; RTL fixes found while getting
+the convolution test to pass on the FPGA top (`hdl/OpenEye_FPGA.v`, `PE.v`, `PE_cluster.v`, the data
+pipelines, `iact_stream_constructor.v`); matching fixes in the Python mappers (`src/open_eye/`); testbench
+changes (Xcelium support, SHM capture, pooling options as FPGA parameters). Each change has its own commit
+(`git log --author=Onofrio`).
 
-## Getting started
+## Flow, step by step
 
-### 1. Install dependencies
+### 01: synthesis (`asic/openeye_fpga/run_synthesis.sh`, `run_synthesis.tcl`)
 
-```bash
-pip install -r requirements.txt
-```
+Generates the parameter header and the DMA register decoder for the configuration (repository generators,
+`test/cocotb_fpga/regmap.yaml`), then Genus maps `OpenEye_FPGA` at 2 ns, TT 0.90 V/25 °C, without placement.
+The three `*_generic` RAM modules are black boxes (`memory_abstract.v`): their wrappers, address and control
+logic stay in the design, the storage does not. Outputs: mapped netlist, parameters, area, gates, timing and
+vectorless-power reports.
 
-Required tools:
-- **Python 3.10+**
-- **Icarus Verilog** (`iverilog`) — default simulator; `brew install icarus-verilog` on macOS
-- **CocoTB** — installed via pip (see `requirements.txt`)
-- Optional: **Verilator ≥ 5.020** (faster simulation; see note below)
-- Optional: **GTKWave** for waveform inspection
+### 02: activity (`asic/openeye_fpga/run_activity.sh`)
 
-> **Verilator patch** — older versions require a one-line fix in `include/verilatedos.h`:
-> ```diff
-> - #define VL_VALUE_STRING_MAX_WORDS 64
-> + #define VL_VALUE_STRING_MAX_WORDS 128
-> ```
+Runs the official convolution test with Xcelium at 2 ns (the regular cocotb default is 10 ns), checks the golden
+output (`TESTS=1 PASS=1 FAIL=0`) and captures the DUT activity in `activity/rtl_sim/dut.shm`.
 
-### 2. Try the demo notebook
+### 03: power (`asic/openeye_fpga/run_power.sh`, `run_power.tcl`)
 
-The fastest way to understand the full workflow is the Jupyter notebook:
+Genus loads the mapped database, elaborates the RTL, enables `RTLStim2Gate`, reads the RTL activity and writes
+`reports/power_activity.rpt` over the whole simulation window.
 
-```
-doc/demo_notebooks/simple_cnn_demo.ipynb
-```
+## Notes
 
-It walks through:
-1. Building a minimal CNN (Conv2D + Dense) on MNIST
-2. INT8 quantization with TFLite
-3. Loading the model with the OpenEye Python toolchain
-4. Inspecting the hardware mapping (ops, PE utilization, cycle estimate)
+- **Activity coverage is partial.** Primary ports and flop outputs are fully annotated, but only about 32 % of
+  the netlist's net drivers (64 % of the RTL net drivers); treat the activity power as an estimate.
+- **The window is the whole test** (initialization, transfers, computation, readback), not only the
+  convolution.
+- Genus reports latches in the activation constructor (reset-only storage); inspect the log before treating a
+  netlist as implementation-ready.
+- Mapped databases (`.db`), SHM and simulator logs stay on the EDA host and are not versioned.
 
-### 3. Run a single-layer simulation
+## Limitations
 
-```bash
-cd test/cocotb_fpga
-make run
-```
+- RAM storage is excluded from area and power (black boxes); memory macros must be accounted for separately.
+- The synthesized top includes DMA and inter-layer buffers, so it is a larger boundary than the FastConv core.
+- RTL activity mapped to gates, typical corner, no SDF, no placement and routing, no clock tree.
+- The workload (2 → 6 channels) and the precision (INT8) differ from the FastConv paper layer; align the
+  workload, activity window and memory boundary before any quantitative comparison.
 
-This simulates one convolutional layer (28×28 input, 32 filters, 3×3 kernel, stride 1) through the full `OpenEye_FPGA` top-level. Parameters can be changed directly in the [Makefile](test/cocotb_fpga/Makefile):
+## License
 
-```makefile
-export LAYER=Convolution      # or FC, Depthwise_Convolution, Pooling
-export NUM_FILTERS=32
-export KERNEL_SIZE_X=3
-export KERNEL_SIZE_Y=3
-export INPUT_SIZE_X=28
-export INPUT_SIZE_Y=28
-export STRIDE=1
-export INPUT_CHANNELS=1
-```
-
-Simulation dumps an FST waveform to `sim_build/` which can be opened with GTKWave:
-
-```bash
-gtkwave sim_build/OpenEye_FPGA.fst
-```
-
----
-
-## Testing strategy
-
-OpenEye uses a layered test hierarchy with [CocoTB](https://www.cocotb.org/) and [pytest](https://docs.pytest.org/):
-
-| Level | Location | What it tests |
-|---|---|---|
-| **PE unit** | `test/cocotb_PE/` | Single processing element: MAC correctness, sparse activation handling, scratchpad addressing |
-| **PE cluster** | `test/cocotb_PE_cluster/` | Cluster of PEs: router configuration, intra-cluster data reuse, psum accumulation |
-| **OpenEye_Parallel** | `test/cocotb_parallel/` | ASIC compute core: single layers, full MNIST CNN, MobileNet depthwise layers |
-| **OpenEye_FPGA** | `test/cocotb_fpga/` | Full FPGA system: DMA loading, iact conversion, quantization, max-pooling, layer-to-layer routing |
-
-### Running the tests
-
-**PE unit test:**
-```bash
-cd test/cocotb_PE
-make run
-```
-
-**Full FPGA system test (single layer):**
-```bash
-cd test/cocotb_fpga
-make run
-```
-
-**Integration test suite (pytest):**
-```bash
-cd test/cocotb_parallel
-pytest
-```
-
-**Full network tests** (AlexNet, ResNet, MobileNet) are also available in `test/cocotb_parallel/test_nets.py` and `test/cocotb_parallel/test_mobilenet.py`.
-
-All tests generate FST waveforms by default (controlled by `IVERILOG_DUMPER=fst`). The notebook `test/cocotb_PE/analysis.ipynb` can be used for post-simulation waveform analysis.
-
----
-
-## Architecture overview
-
-```
-Host CPU  ──DMA (64-bit)──►  OpenEye_FPGA
-                              │
-                              ├─ RST_SYNC          (metastability-safe reset)
-                              ├─ dma_storage        (config register file)
-                              ├─ RAM_SP ×32         (iact double-buffer, ping-pong)
-                              ├─ iact_stream_constructor ×(CC×CR)
-                              │    └── encodes raw pixels → sparse iact streams
-                              ├─ RAM_SP             (weight staging buffer)
-                              ├─ RAM_SP ×(CC×CR×P/2) (psum staging buffers)
-                              └─ OpenEye_Parallel   (ASIC compute core)
-                                   └─ OpenEye_Cluster ×(CC×CR)
-                                        └─ PE_cluster
-                                             └─ PE ×(WGHT×PSUM)
-```
-
-The main FSM sequences through:
-`IDLE → GET_PARAMETERS → GET_ROUTER_CONFIG → GET_IACT → GET_WGHT → GET_BIAS → GET_QUANTIZE → GET_OFFSET → START_CONVERTER → CONVERT_IACT → WAIT_FOR_RESULTS`
-
-and the PSUM FSM handles result collection and optional layer chaining:
-`PSUM_IDLE → CALCULATE_PSUM → PSUM_GET_RESULTS → PSUM_SEND_RESULTS`
-
-Full FSM documentation, all parameters, port descriptions, and key data-path explanations are in [doc/OpenEye_FPGA_documentation.md](doc/OpenEye_FPGA_documentation.md).
-
----
-
-## Documentation
-
-| Resource | Description |
-|---|---|
-| [doc/OpenEye_FPGA_documentation.md](doc/OpenEye_FPGA_documentation.md) | Detailed technical documentation of the top-level FPGA module: FSMs, parameters, ports, submodule descriptions, data paths |
-| [doc/demo_notebooks/simple_cnn_demo.ipynb](doc/demo_notebooks/simple_cnn_demo.ipynb) | Quickstart notebook — minimal CNN, quantization, hardware mapping |
-| `doc/build/html/` | Sphinx HTML documentation (build with `make html` in `doc/`) |
-
-To build the HTML docs locally:
-
-```bash
-cd doc
-pip install -r requirements.txt
-make html
-# open build/html/index.html
-```
-
----
-
-## Licensing
-
-OpenEye is covered by the Solderpad Hardware License, Version 2.1 (see [LICENSE](LICENSE) for full text).
+OpenEye is released under the [Solderpad Hardware License v2.1](https://solderpad.org/licenses/SHL-2.1/)
+(`LICENSE`); the fork does not change it. The standard-cell library is not distributed.
